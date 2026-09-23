@@ -4,25 +4,25 @@
 
 @layer base {
   body {
-    @apply bg-[#07090E] text-slate-100 antialiased;
+    @apply bg-[#09090b] text-zinc-100 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
-/* Custom crisp scrollbar */
+/* Crisp technical scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #07090E;
+  background: #09090b;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
+  background: #27272a;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: #3f3f46;
 }
 
 .mono-tag {

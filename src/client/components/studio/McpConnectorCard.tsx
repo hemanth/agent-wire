@@ -18,23 +18,23 @@ export const McpConnectorCard: React.FC<McpConnectorCardProps> = ({
   return (
     <div
       role="listitem"
-      className="p-3.5 rounded-xl border border-white/10 bg-black/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      className="p-3.5 rounded-lg border border-zinc-800 bg-zinc-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-xs text-white">{mcp.name}</span>
-          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-slate-300 uppercase">
+          <span className="font-medium text-xs text-zinc-200">{mcp.name}</span>
+          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 uppercase">
             {mcp.type}
           </span>
           <span
-            className={`w-2 h-2 rounded-full ${
-              mcp.status === 'connected' ? 'bg-emerald-400' : mcp.status === 'error' ? 'bg-rose-400' : 'bg-amber-400'
+            className={`w-1.5 h-1.5 rounded-full ${
+              mcp.status === 'connected' ? 'bg-emerald-500' : mcp.status === 'error' ? 'bg-red-400' : 'bg-amber-400'
             }`}
             title={`Status: ${mcp.status}`}
             aria-label={`Status: ${mcp.status}`}
           />
         </div>
-        <div className="font-mono text-xs text-slate-400 truncate mt-0.5">
+        <div className="font-mono text-xs text-zinc-500 truncate mt-0.5">
           {mcp.url}
         </div>
 
@@ -43,7 +43,7 @@ export const McpConnectorCard: React.FC<McpConnectorCardProps> = ({
             {mcp.tools.map((t, i) => (
               <span
                 key={i}
-                className="px-2 py-0.5 rounded bg-indigo-950/40 text-indigo-300 border border-indigo-500/20 text-[10px] font-mono"
+                className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 text-[10px] font-mono"
                 title={t.description}
               >
                 {t.name}
@@ -53,7 +53,7 @@ export const McpConnectorCard: React.FC<McpConnectorCardProps> = ({
         )}
 
         {mcp.errorMessage && (
-          <div role="alert" className="flex items-center gap-1 text-[11px] font-mono text-rose-400 mt-1.5">
+          <div role="alert" className="flex items-center gap-1 text-[11px] font-mono text-red-400 mt-1.5">
             <AlertCircle className="w-3 h-3 shrink-0" aria-hidden="true" />
             <span>{mcp.errorMessage}</span>
           </div>
@@ -67,18 +67,18 @@ export const McpConnectorCard: React.FC<McpConnectorCardProps> = ({
           disabled={isProbing}
           aria-busy={isProbing}
           aria-label={`Test ping ${mcp.name}`}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-mono transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-mono border border-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
         >
-          <RefreshCw className={`w-3 h-3 ${isProbing ? 'animate-spin' : ''}`} aria-hidden="true" />
+          <RefreshCw className={`w-3 h-3 text-zinc-400 ${isProbing ? 'animate-spin' : ''}`} aria-hidden="true" />
           <span>{isProbing ? 'Probing...' : 'Test Ping'}</span>
         </button>
         <button
           type="button"
           onClick={() => onRemove(mcp.id)}
           aria-label={`Remove connector ${mcp.name}`}
-          className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 transition-colors focus-visible:ring-2 focus-visible:ring-rose-500"
+          className="p-1.5 rounded-md hover:bg-red-950/30 text-zinc-500 hover:text-red-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
         >
-          <Trash2 className="w-4 h-4" aria-hidden="true" />
+          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
       </div>
     </div>

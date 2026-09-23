@@ -57,13 +57,13 @@ export const AgentFleet: React.FC<AgentFleetProps> = ({
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-zinc-100 tracking-tight flex items-center gap-2">
             Active Fleet
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <span className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
               {agents.length} Endpoints Live
             </span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-zinc-400 mt-1">
             Every agent below is deployed with a permanent, publicly curlable REST endpoint.
           </p>
         </div>
@@ -71,20 +71,20 @@ export const AgentFleet: React.FC<AgentFleetProps> = ({
         <div className="flex items-center gap-3">
           {/* Search filter */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
             <input
               type="search"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Filter agents..."
               aria-label="Filter agents by name, slug, or model"
-              className="pl-8 pr-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus-visible:ring-2 focus-visible:ring-indigo-500 w-44 sm:w-56"
+              className="pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 focus-visible:ring-1 focus-visible:ring-zinc-400 w-44 sm:w-56 font-mono"
             />
           </div>
 
           <button
             onClick={onNewAgent}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all shadow-md shadow-indigo-600/20 shrink-0 focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-medium transition-colors border border-transparent shadow-sm shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             <span>+ Deploy Agent</span>
           </button>
@@ -93,11 +93,11 @@ export const AgentFleet: React.FC<AgentFleetProps> = ({
 
       {/* Grid of Agents */}
       {filteredAgents.length === 0 ? (
-        <div role="status" className="text-center py-16 border border-dashed border-white/10 rounded-2xl bg-white/[0.01]">
-          <p className="text-sm text-slate-400">No agents match "{searchQuery}"</p>
+        <div role="status" className="text-center py-16 border border-zinc-800 rounded-xl bg-zinc-950/40">
+          <p className="text-sm text-zinc-400">No agents match "{searchQuery}"</p>
           <button
             onClick={() => setSearchQuery('')}
-            className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 font-mono underline"
+            className="mt-2 text-xs text-zinc-400 hover:text-zinc-200 font-mono underline"
           >
             Clear filter
           </button>

@@ -99,7 +99,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#07090E] flex flex-col">
+    <div className="min-h-screen bg-[#09090b] flex flex-col text-zinc-100">
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -115,21 +115,21 @@ export const App: React.FC = () => {
           aria-live="polite"
           className={`px-4 py-2.5 text-xs font-mono border-b flex items-center justify-between transition-all ${
             authBanner.type === 'loading'
-              ? 'bg-indigo-950/60 border-indigo-500/30 text-indigo-300'
+              ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
               : authBanner.type === 'success'
-              ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
-              : 'bg-rose-950/60 border-rose-500/30 text-rose-300'
+              ? 'bg-zinc-900 border-emerald-900/60 text-emerald-300'
+              : 'bg-zinc-900 border-red-900/60 text-red-300'
           }`}
         >
           <div className="max-w-7xl mx-auto flex items-center gap-2 flex-1">
-            {authBanner.type === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400 shrink-0" />}
+            {authBanner.type === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400 shrink-0" />}
             {authBanner.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-            {authBanner.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+            {authBanner.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
             <span>{authBanner.message}</span>
           </div>
           <button
             onClick={() => setAuthBanner(null)}
-            className="p-1 hover:bg-white/10 rounded text-slate-400 hover:text-white"
+            className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200"
             aria-label="Dismiss message"
           >
             <X className="w-3.5 h-3.5" />

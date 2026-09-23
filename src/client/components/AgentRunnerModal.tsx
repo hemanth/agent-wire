@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Play, Loader2, Sparkles } from 'lucide-react';
+import { X, Play, Loader2, Bot } from 'lucide-react';
 import { Agent, RunAgentResponse } from '../../types.ts';
 import { CurlSnippet } from './CurlSnippet.tsx';
 import { TelemetryBar } from './runner/TelemetryBar.tsx';
@@ -56,30 +56,30 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="runner-modal-title"
       ref={modalRef}
     >
-      <div className="bg-[#0C0F17] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-[#111113] border border-zinc-800 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/40">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-              <Play className="w-4 h-4 fill-indigo-400" aria-hidden="true" />
+            <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 shrink-0">
+              <Play className="w-3.5 h-3.5 fill-zinc-300" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 id="runner-modal-title" className="font-semibold text-white text-base">
+                <h2 id="runner-modal-title" className="font-semibold text-zinc-100 text-base">
                   {agent.name}
                 </h2>
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-white/5 border border-white/10 text-slate-400">
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
                   {agent.id}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 truncate max-w-md">
+              <p className="text-xs text-zinc-400 truncate max-w-md">
                 {agent.tagline || 'Interactive Sandbox & Curl Runner'}
               </p>
             </div>
@@ -87,7 +87,7 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
           <button
             onClick={onClose}
             aria-label="Close runner modal"
-            className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
@@ -98,7 +98,7 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
           
           {/* Section 1: cURL Snippet */}
           <section aria-labelledby="curl-label">
-            <h3 id="curl-label" className="text-xs font-mono text-slate-400 mb-2 uppercase tracking-wider">
+            <h3 id="curl-label" className="text-xs font-mono text-zinc-400 mb-2 uppercase tracking-wider">
               1. Direct cURL Command
             </h3>
             <CurlSnippet agentId={agent.id} agentName={agent.name} task={task} />
@@ -107,10 +107,10 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
           {/* Section 2: In-Browser Runner */}
           <section aria-labelledby="sandbox-label">
             <div className="flex items-center justify-between mb-2">
-              <label htmlFor="task-prompt-input" id="sandbox-label" className="block text-xs font-mono text-slate-400 uppercase tracking-wider">
+              <label htmlFor="task-prompt-input" id="sandbox-label" className="block text-xs font-mono text-zinc-400 uppercase tracking-wider">
                 2. Test In-Browser Sandbox
               </label>
-              <span className="text-[11px] text-slate-400 font-mono">Press Cmd+Enter to run</span>
+              <span className="text-[11px] text-zinc-500 font-mono">Press Cmd+Enter to run</span>
             </div>
             <div className="relative">
               <textarea
@@ -124,22 +124,22 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
                 }}
                 rows={3}
                 placeholder="Enter task or instruction for this agent..."
-                className="w-full rounded-xl bg-black/40 border border-white/10 p-3 pb-12 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus-visible:ring-2 focus-visible:ring-indigo-500 font-mono resize-none"
+                className="w-full rounded-lg bg-zinc-950 border border-zinc-800 p-3 pb-12 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 focus-visible:ring-1 focus-visible:ring-zinc-400 font-mono resize-none"
               />
               <button
                 onClick={handleRun}
                 disabled={loading || !task.trim()}
                 aria-busy={loading}
-                className="absolute right-3 bottom-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-all shadow-lg shadow-indigo-600/20 focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className="absolute right-3 bottom-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-100 hover:bg-white active:bg-zinc-200 disabled:opacity-40 text-zinc-950 text-xs font-medium transition-colors border border-transparent shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-950" aria-hidden="true" />
                     <span>Executing...</span>
                   </>
                 ) : (
                   <>
-                    <Play className="w-3.5 h-3.5 fill-white" aria-hidden="true" />
+                    <Play className="w-3.5 h-3.5 fill-zinc-950 text-zinc-950" aria-hidden="true" />
                     <span>Run Task</span>
                   </>
                 )}
@@ -149,7 +149,7 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
 
           {/* Error Message */}
           {error && (
-            <div role="alert" className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-mono">
+            <div role="alert" className="p-3.5 rounded-lg bg-red-950/40 border border-red-900/60 text-red-300 text-xs font-mono">
               <strong>Execution Error:</strong> {error}
             </div>
           )}
@@ -161,12 +161,12 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
               <ExecutionTrace steps={response.steps} />
 
               {/* Agent Output Card */}
-              <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/10 p-4">
-                <div className="flex items-center gap-2 mb-2 text-indigo-300 text-xs font-mono uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <div className="flex items-center gap-2 mb-2 text-zinc-400 text-xs font-mono uppercase tracking-wider">
+                  <Bot className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />
                   <span>Agent Output</span>
                 </div>
-                <div className="text-sm text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
+                <div className="text-sm text-zinc-200 whitespace-pre-wrap font-sans leading-relaxed">
                   {response.result}
                 </div>
               </div>
@@ -176,16 +176,15 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-white/10 bg-white/[0.02] flex items-center justify-between text-xs text-slate-400">
-          <span>Endpoint: <code className="font-mono text-slate-300">/api/agents/{agent.id}/run</code></span>
+        <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-900/40 flex items-center justify-between text-xs text-zinc-400">
+          <span>Endpoint: <code className="font-mono text-zinc-300 bg-zinc-900 border border-zinc-800 px-1 py-0.5 rounded">/api/agents/{agent.id}/run</code></span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="px-4 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             Close
           </button>
         </div>
-
       </div>
     </div>
   );
