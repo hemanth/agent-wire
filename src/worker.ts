@@ -245,14 +245,19 @@ export default {
     // 6. OpenRouter PKCE Code Exchange Proxy
     if (path === '/api/auth/openrouter-exchange' && request.method === 'POST') {
       try {
-        const { code, code_verifier } = await request.json() as any;
+        const { code, code_verifier, code_challenge_method } = await request.json() as any;
         const resp = await fetch('https://openrouter.ai/api/v1/auth/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, code_verifier })
+          body: JSON.stringify({
+            code,
+            code_verifier,
+            code_challenge_method: code_challenge_method || 'S256'
+          })
         });
         const data = await resp.json();
         return new Response(JSON.stringify(data), {
+          status: resp.status,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       } catch (err: any) {

@@ -79,7 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={onOpenAuthModal}
-            aria-label={openRouterKey ? 'OpenRouter API Key Connected' : 'Connect OpenRouter API Key'}
+            aria-label={openRouterKey ? 'OpenRouter Active (Manage Key)' : 'Connect OpenRouter'}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 ${
               openRouterKey
                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Key, ShieldCheck, Sparkles, ExternalLink } from 'lucide-react';
 import { useModalA11y } from '../hooks/useModalA11y.ts';
+import { initiateOAuth } from '../lib/openrouter-auth.ts';
 
 interface OpenRouterModalProps {
   currentKey: string | null;
@@ -8,41 +9,19 @@ interface OpenRouterModalProps {
   onClose: () => void;
 }
 
-// PKCE Helper functions
-function generateRandomString(length: number): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-  const array = new Uint8Array(length);
-  window.crypto.getRandomValues(array);
-  return Array.from(array, byte => chars[byte % chars.length]).join('');
-}
-
-async function sha256Base64Url(str: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const base64 = btoa(String.fromCharCode(...hashArray));
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, onSaveKey, onClose }) => {
   const [manualKey, setManualKey] = useState(currentKey || '');
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const modalRef = useModalA11y<HTMLDivElement>({ isOpen: true, onClose });
 
   const handleStartOAuth = async () => {
     try {
-      const verifier = generateRandomString(64);
-      const challenge = await sha256Base64Url(verifier);
-
-      sessionStorage.setItem('openrouter_code_verifier', verifier);
-
-      const callbackUrl = window.location.origin + window.location.pathname;
-      const authUrl = `https://openrouter.ai/auth?callback_url=${encodeURIComponent(callbackUrl)}&code_challenge=${challenge}&code_challenge_method=S256`;
-
-      window.location.href = authUrl;
-    } catch (err) {
+      setIsRedirecting(true);
+      await initiateOAuth();
+    } catch (err: any) {
+      setIsRedirecting(false);
       console.error('Failed to initiate PKCE flow', err);
-      alert('Could not start OpenRouter OAuth. You can enter an API key manually.');
+      alert('Could not start OpenRouter OAuth: ' + (err.message || err));
     }
   };
 
@@ -111,10 +90,12 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
             </p>
             <button
               onClick={handleStartOAuth}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all shadow-md shadow-indigo-600/20 focus-visible:ring-2 focus-visible:ring-indigo-500"
+              disabled={isRedirecting}
+              aria-busy={isRedirecting}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium transition-all shadow-md shadow-indigo-600/20 focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               <Sparkles className="w-4 h-4" aria-hidden="true" />
-              <span>Sign In with OpenRouter</span>
+              <span>{isRedirecting ? 'Redirecting to OpenRouter...' : 'Sign In with OpenRouter'}</span>
               <ExternalLink className="w-3.5 h-3.5 ml-1 opacity-75" aria-hidden="true" />
             </button>
           </div>
