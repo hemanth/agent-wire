@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Key, ShieldCheck, Sparkles, ExternalLink, ArrowRight } from 'lucide-react';
+import { X, Key, ShieldCheck, Sparkles, ExternalLink } from 'lucide-react';
+import { useModalA11y } from '../hooks/useModalA11y.ts';
 
 interface OpenRouterModalProps {
   currentKey: string | null;
@@ -26,6 +27,7 @@ async function sha256Base64Url(str: string): Promise<string> {
 
 export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, onSaveKey, onClose }) => {
   const [manualKey, setManualKey] = useState(currentKey || '');
+  const modalRef = useModalA11y<HTMLDivElement>({ isOpen: true, onClose });
 
   const handleStartOAuth = async () => {
     try {
@@ -60,72 +62,85 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="auth-modal-title"
+      ref={modalRef}
+    >
       <div className="bg-[#0C0F17] border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-              <Key className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+              <Key className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="font-semibold text-white">OpenRouter Model Gateway</h3>
-              <p className="text-xs text-slate-400">Multi-Model Fallbacks (Claude, Gemini, Llama, DeepSeek)</p>
+              <h2 id="auth-modal-title" className="font-semibold text-white text-base">
+                OpenRouter Model Gateway
+              </h2>
+              <p className="text-xs text-slate-400">
+                Automatic Multi-Model Fallbacks (Claude, Gemini, Llama)
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            aria-label="Close modal"
+            className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-500"
+          >
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
         <div className="p-6 space-y-6">
-          
           {/* Method A: 1-Click Sign in with OpenRouter via PKCE */}
           <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-950/20 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-indigo-300 text-xs font-semibold uppercase tracking-wider">
-                <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                Recommended: 1-Click PKCE Auth
+                <ShieldCheck className="w-4 h-4 text-indigo-400" aria-hidden="true" />
+                <span>Recommended: 1-Click PKCE Auth</span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 Zero Copy-Paste
               </span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Securely authorize AgentWire with your OpenRouter account using standard OAuth PKCE. You can revoke access anytime.
+              Securely authorize AgentWire with your OpenRouter account using standard OAuth PKCE. Revoke anytime in your OpenRouter settings.
             </p>
             <button
               onClick={handleStartOAuth}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all shadow-md shadow-indigo-600/20"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all shadow-md shadow-indigo-600/20 focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
-              <Sparkles className="w-4 h-4" />
-              Sign In with OpenRouter
-              <ExternalLink className="w-3.5 h-3.5 ml-1 opacity-75" />
+              <Sparkles className="w-4 h-4" aria-hidden="true" />
+              <span>Sign In with OpenRouter</span>
+              <ExternalLink className="w-3.5 h-3.5 ml-1 opacity-75" aria-hidden="true" />
             </button>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-white/10" />
-            <span className="text-[11px] font-mono text-slate-500 uppercase">Or Enter Key Manually</span>
+            <span className="text-[11px] font-mono text-slate-400 uppercase">Or Enter Key Manually</span>
             <div className="flex-1 h-px bg-white/10" />
           </div>
 
           {/* Method B: Manual Key Input */}
           <form onSubmit={handleSaveManual} className="space-y-4">
             <div>
-              <label className="block text-xs font-mono text-slate-400 mb-1.5">
-                OpenRouter API Key (sk-or-v1-...)
+              <label htmlFor="openrouter-api-key-input" className="block text-xs font-mono text-slate-300 mb-1.5">
+                OpenRouter API Key (<code className="text-slate-400">sk-or-v1-...</code>)
               </label>
               <input
+                id="openrouter-api-key-input"
                 type="password"
                 value={manualKey}
                 onChange={e => setManualKey(e.target.value)}
                 placeholder="sk-or-v1-xxxxxxxxxxxxxxxx"
-                className="w-full rounded-xl bg-black/40 border border-white/10 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 font-mono"
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus-visible:ring-2 focus-visible:ring-indigo-500 font-mono"
               />
-              <p className="text-[11px] text-slate-500 mt-1">
-                Keys are stored only in your browser's local storage and passed directly to OpenRouter.
+              <p className="text-[11px] text-slate-400 mt-1">
+                Keys remain solely in your browser's local storage and are passed directly to OpenRouter.
               </p>
             </div>
 
@@ -134,7 +149,7 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="text-xs text-rose-400 hover:text-rose-300 font-mono"
+                  className="text-xs text-rose-400 hover:text-rose-300 font-mono focus-visible:ring-2 focus-visible:ring-rose-500 rounded px-1"
                 >
                   Disconnect Key
                 </button>
@@ -143,22 +158,20 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs transition-colors"
+                  className="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-white text-black hover:bg-slate-200 text-xs font-medium transition-colors"
+                  className="px-4 py-1.5 rounded-lg bg-white text-black hover:bg-slate-200 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500"
                 >
                   Save Key
                 </button>
               </div>
             </div>
           </form>
-
         </div>
-
       </div>
     </div>
   );

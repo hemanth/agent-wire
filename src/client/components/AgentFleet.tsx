@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { Bot, Play, Copy, Check, Trash2, Terminal, Wrench, BookOpen, Layers, ExternalLink, Activity } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search } from 'lucide-react';
 import { Agent } from '../../types.ts';
+import { AgentCard } from './fleet/AgentCard.tsx';
+import { FleetEmptyState } from './fleet/FleetEmptyState.tsx';
 
 interface AgentFleetProps {
   agents: Agent[];
+  isLoading?: boolean;
   onSelectAgent: (agent: Agent) => void;
   onDeleteAgent: (id: string) => void;
   onNewAgent: () => void;
@@ -11,46 +14,48 @@ interface AgentFleetProps {
 
 export const AgentFleet: React.FC<AgentFleetProps> = ({
   agents,
+  isLoading = false,
   onSelectAgent,
   onDeleteAgent,
   onNewAgent
 }) => {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const copyCurl = (agent: Agent, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const endpoint = `${window.location.origin}/api/agents/${agent.id}/run`;
-    const curl = `curl -X POST ${endpoint} \\\n  -H "Content-Type: application/json" \\\n  -d '{"task": "Hello! Report your status."}'`;
-    navigator.clipboard.writeText(curl);
-    setCopiedId(agent.id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+  const filteredAgents = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return agents;
+    return agents.filter(
+      a =>
+        a.name.toLowerCase().includes(q) ||
+        a.slug.toLowerCase().includes(q) ||
+        a.tagline.toLowerCase().includes(q) ||
+        a.models.some(m => m.toLowerCase().includes(q))
+    );
+  }, [agents, searchQuery]);
 
-  if (agents.length === 0) {
+  // Skeleton Loading State
+  if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto py-20 text-center space-y-4">
-        <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-slate-400">
-          <Bot className="w-8 h-8" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6" aria-busy="true" aria-label="Loading agents">
+        <div className="h-8 w-48 bg-white/5 rounded-lg animate-pulse" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-56 rounded-2xl bg-white/[0.03] border border-white/5 animate-pulse" />
+          ))}
         </div>
-        <h2 className="text-xl font-semibold text-white">No Deployed Agents Yet</h2>
-        <p className="text-sm text-slate-400 max-w-md mx-auto">
-          Wire up your first agent with custom persona instructions, remote MCP tools, and attached skills.
-        </p>
-        <button
-          onClick={onNewAgent}
-          className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all shadow-lg shadow-indigo-600/20"
-        >
-          Create First Agent
-        </button>
       </div>
     );
   }
 
+  // Empty State
+  if (agents.length === 0) {
+    return <FleetEmptyState onNewAgent={onNewAgent} />;
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      
-      {/* Overview header */}
-      <div className="flex items-center justify-between">
+      {/* Header & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
             Active Fleet
@@ -62,122 +67,53 @@ export const AgentFleet: React.FC<AgentFleetProps> = ({
             Every agent below is deployed with a permanent, publicly curlable REST endpoint.
           </p>
         </div>
-        <button
-          onClick={onNewAgent}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all shadow-md shadow-indigo-600/20"
-        >
-          + Deploy New Agent
-        </button>
+
+        <div className="flex items-center gap-3">
+          {/* Search filter */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Filter agents..."
+              aria-label="Filter agents by name, slug, or model"
+              className="pl-8 pr-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus-visible:ring-2 focus-visible:ring-indigo-500 w-44 sm:w-56"
+            />
+          </div>
+
+          <button
+            onClick={onNewAgent}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all shadow-md shadow-indigo-600/20 shrink-0 focus-visible:ring-2 focus-visible:ring-indigo-500"
+          >
+            <span>+ Deploy Agent</span>
+          </button>
+        </div>
       </div>
 
       {/* Grid of Agents */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {agents.map(agent => {
-          const totalTools = (agent.mcps || []).reduce((acc, m) => acc + (m.tools?.length || 0), 0);
-          const activeSkills = (agent.skills || []).filter(s => s.enabled);
-
-          return (
-            <div
+      {filteredAgents.length === 0 ? (
+        <div role="status" className="text-center py-16 border border-dashed border-white/10 rounded-2xl bg-white/[0.01]">
+          <p className="text-sm text-slate-400">No agents match "{searchQuery}"</p>
+          <button
+            onClick={() => setSearchQuery('')}
+            className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 font-mono underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" role="list" aria-label="Deployed agents">
+          {filteredAgents.map(agent => (
+            <AgentCard
               key={agent.id}
-              onClick={() => onSelectAgent(agent)}
-              className="group rounded-2xl border border-white/10 bg-[#0C0F17] hover:border-indigo-500/40 hover:bg-[#0E121C] transition-all p-5 flex flex-col justify-between cursor-pointer relative shadow-sm hover:shadow-xl hover:shadow-indigo-500/5"
-            >
-              
-              {/* Top Row: Name + Live badge */}
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white truncate text-base group-hover:text-indigo-300 transition-colors">
-                      {agent.name}
-                    </h3>
-                    <p className="text-xs text-slate-400 line-clamp-2 mt-0.5 leading-relaxed">
-                      {agent.tagline || 'Custom MCP Agent'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono whitespace-nowrap">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live
-                  </div>
-                </div>
-
-                {/* Model Fallback Chain */}
-                <div className="my-3 py-2 px-2.5 rounded-lg bg-black/40 border border-white/5 space-y-1">
-                  <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                    <Layers className="w-3 h-3 text-indigo-400" />
-                    OpenRouter Fallback Chain:
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {agent.models.map((m, idx) => (
-                      <React.Fragment key={m}>
-                        <span className="text-[11px] font-mono text-slate-300 px-1.5 py-0.5 rounded bg-white/5 truncate max-w-[140px]" title={m}>
-                          {m.split('/')[1] || m}
-                        </span>
-                        {idx < agent.models.length - 1 && (
-                          <span className="text-slate-600 text-[10px]">→</span>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Attached Connectors & Skills */}
-                <div className="flex items-center gap-3 text-xs text-slate-400 my-3">
-                  <span className="flex items-center gap-1.5 font-mono" title={`${agent.mcps?.length || 0} MCP servers, ${totalTools} tools`}>
-                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                    {agent.mcps?.length || 0} MCPs ({totalTools} tools)
-                  </span>
-                  <span className="flex items-center gap-1.5 font-mono" title={`${activeSkills.length} active skills`}>
-                    <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-                    {activeSkills.length} Skills
-                  </span>
-                </div>
-              </div>
-
-              {/* Bottom Actions */}
-              <div className="pt-3 border-t border-white/5 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-slate-500 font-mono text-[11px]">
-                  <Activity className="w-3 h-3 text-slate-400" />
-                  <span>{agent.invocationCount || 0} runs</span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={(e) => copyCurl(agent, e)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 font-mono text-[11px] transition-colors"
-                    title="Copy cURL command"
-                  >
-                    {copiedId === agent.id ? (
-                      <>
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span className="text-emerald-300">Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Terminal className="w-3 h-3 text-indigo-400" />
-                        <span>cURL</span>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm(`Delete agent "${agent.name}"?`)) {
-                        onDeleteAgent(agent.id);
-                      }
-                    }}
-                    className="p-1.5 rounded-md hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-colors"
-                    title="Delete Agent"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-            </div>
-          );
-        })}
-      </div>
-
+              agent={agent}
+              onSelect={onSelectAgent}
+              onDelete={onDeleteAgent}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
