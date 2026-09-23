@@ -1,0 +1,13 @@
+name = "agent-wire"
+main = "src/worker.ts"
+compatibility_date = "2026-09-22"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+
+# KV namespace for persisting deployed agents across Cloudflare edge
+# Run: wrangler kv:namespace create AGENTS_KV
+# [[kv_namespaces]]
+# binding = "AGENTS_KV"
+# id = "<id>"
