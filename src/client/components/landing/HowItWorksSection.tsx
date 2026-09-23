@@ -42,10 +42,10 @@ skills: ["taste-skill", "code-review"]`
   return (
     <section className="space-y-6 pt-8">
       <div className="text-center max-w-2xl mx-auto space-y-2">
-        <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-bold text-zinc-950 tracking-tight">
           How It Works
         </h2>
-        <p className="text-xs sm:text-sm text-zinc-400">
+        <p className="text-xs sm:text-sm text-zinc-600">
           From an idea to a live serverless agent microservice in three simple steps.
         </p>
       </div>
@@ -56,16 +56,18 @@ skills: ["taste-skill", "code-review"]`
           return (
             <div
               key={step.num}
-              className="rounded-xl border border-zinc-800 bg-[#111113] p-5 flex flex-col justify-between space-y-4"
+              className="rounded-xl border bg-white p-5 flex flex-col justify-between space-y-4 shadow-xs hover:shadow-md transition-all"
+              style={{
+                borderColor: `${step.color}`
+              }}
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span
-                    className="font-mono text-xs font-bold px-2 py-0.5 rounded border"
+                    className="font-mono text-xs font-bold px-2 py-0.5 rounded border text-zinc-950"
                     style={{
-                      backgroundColor: `${step.color}15`,
-                      borderColor: `${step.color}35`,
-                      color: step.color
+                      backgroundColor: `${step.color}50`,
+                      borderColor: `${step.color}`
                     }}
                   >
                     STEP {step.num}
@@ -73,16 +75,16 @@ skills: ["taste-skill", "code-review"]`
                   <Icon className="w-4 h-4 text-zinc-500" aria-hidden="true" />
                 </div>
 
-                <h3 className="font-semibold text-sm text-zinc-200">
+                <h3 className="font-bold text-sm text-zinc-950">
                   {step.title}
                 </h3>
 
-                <p className="text-xs text-zinc-400 leading-relaxed">
+                <p className="text-xs text-zinc-600 leading-relaxed">
                   {step.desc}
                 </p>
               </div>
 
-              <div className="rounded-lg bg-zinc-950 border border-zinc-800/80 p-3 text-[11px] font-mono text-zinc-300 overflow-x-auto leading-relaxed">
+              <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-3 text-[11px] font-mono text-zinc-100 overflow-x-auto leading-relaxed shadow-xs">
                 <pre className="whitespace-pre">{step.snippet}</pre>
               </div>
             </div>

@@ -36,11 +36,11 @@ export const PALETTE_TOKENS = [
 
 export const PaletteLegend: React.FC = () => {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-[#111113] p-4 text-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 pb-3 border-b border-zinc-800/80">
-        <div className="flex items-center gap-2 text-zinc-300">
-          <Palette className="w-4 h-4 text-zinc-400" aria-hidden="true" />
-          <span className="font-medium text-xs text-zinc-200">
+    <div className="rounded-xl border border-zinc-200 bg-white p-4 text-xs shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 pb-3 border-b border-zinc-100">
+        <div className="flex items-center gap-2 text-zinc-800">
+          <Palette className="w-4 h-4 text-zinc-600" aria-hidden="true" />
+          <span className="font-bold text-xs text-zinc-950">
             System Architecture Color Map
           </span>
           <span className="text-[11px] font-mono text-zinc-500">
@@ -51,7 +51,7 @@ export const PaletteLegend: React.FC = () => {
           href="https://coolors.co/palette/d3f8e2-e4c1f9-f694c1-ede7b1-a9def9"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 font-mono text-[11px] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded"
+          className="inline-flex items-center gap-1.5 text-zinc-600 hover:text-zinc-950 font-mono text-[11px] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded"
         >
           <span>coolors.co/palette/d3f8e2-e4c1f9-f694c1-ede7b1-a9def9</span>
           <ExternalLink className="w-3 h-3 opacity-70" aria-hidden="true" />
@@ -62,22 +62,28 @@ export const PaletteLegend: React.FC = () => {
         {PALETTE_TOKENS.map(token => (
           <div
             key={token.hex}
-            className="p-2.5 rounded-lg border border-zinc-800/80 bg-zinc-950/60 flex flex-col justify-between"
+            className="p-3 rounded-lg border flex flex-col justify-between shadow-xs transition-transform hover:-translate-y-0.5"
+            style={{
+              backgroundColor: `${token.hex}35`,
+              borderColor: `${token.hex}`
+            }}
           >
-            <div className="flex items-center justify-between gap-1.5 mb-1.5">
-              <span className="font-semibold text-xs text-zinc-200 truncate">{token.role}</span>
-              <div
-                className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0"
-                style={{ backgroundColor: token.hex }}
-                aria-hidden="true"
-              />
+            <div>
+              <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                <span className="font-bold text-xs text-zinc-950 truncate">{token.role}</span>
+                <div
+                  className="w-3.5 h-3.5 rounded-full border border-black/25 shadow-xs shrink-0"
+                  style={{ backgroundColor: token.hex }}
+                  aria-hidden="true"
+                />
+              </div>
+              <p className="text-[11px] text-zinc-800 font-medium leading-snug">
+                {token.desc}
+              </p>
             </div>
-            <p className="text-[11px] text-zinc-400 leading-snug line-clamp-2">
-              {token.desc}
-            </p>
-            <div className="mt-2 pt-1.5 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+            <div className="mt-2.5 pt-1.5 border-t border-black/10 flex items-center justify-between text-[10px] font-mono text-zinc-700 font-semibold">
               <span>{token.name}</span>
-              <span className="text-zinc-400">{token.hex}</span>
+              <span className="text-zinc-950">{token.hex}</span>
             </div>
           </div>
         ))}

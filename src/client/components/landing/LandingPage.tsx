@@ -36,20 +36,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* 4. Featured Live Agents (Interactive Fleet Preview) */}
       <section className="space-y-6 pt-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 pb-4">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight flex items-center gap-2">
-              <Bot className="w-5 h-5 text-zinc-400" />
+            <h2 className="text-xl sm:text-2xl font-bold text-zinc-950 tracking-tight flex items-center gap-2">
+              <Bot className="w-5 h-5 text-zinc-700" />
               Featured Live Agents
             </h2>
-            <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+            <p className="text-xs sm:text-sm text-zinc-600 mt-1">
               Test any agent directly in your browser or copy its cURL command.
             </p>
           </div>
 
           <button
             onClick={onGoToStudio}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-medium transition-colors border border-transparent shadow-sm self-start sm:self-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-black text-white text-xs font-medium transition-colors border border-transparent shadow-xs self-start sm:self-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             <span>+ Deploy New Agent</span>
           </button>
@@ -74,20 +74,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <TerminalSection />
 
       {/* 7. Bottom CTA */}
-      <section className="rounded-2xl border border-zinc-800 bg-[#111113] p-8 sm:p-12 text-center space-y-4">
-        <h2 className="text-2xl sm:text-3xl font-bold text-zinc-100 tracking-tight">
+      <section className="rounded-2xl border border-[#A5E5BF] bg-gradient-to-br from-[#D3F8E2]/50 via-white to-[#A9DEF9]/30 p-8 sm:p-12 text-center space-y-4 shadow-sm">
+        <h2 className="text-2xl sm:text-3xl font-bold text-zinc-950 tracking-tight">
           Ready to Deploy Your Own MCP Agent?
         </h2>
-        <p className="text-xs sm:text-sm text-zinc-400 max-w-xl mx-auto leading-relaxed">
+        <p className="text-xs sm:text-sm text-zinc-600 max-w-xl mx-auto leading-relaxed">
           Configure instructions, plug in remote tools, and get your curlable serverless edge URL in under 30 seconds.
         </p>
         <div className="pt-2">
           <button
             onClick={onGoToStudio}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 font-medium text-sm transition-colors border border-transparent shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-zinc-950 hover:bg-black text-white font-medium text-sm transition-colors border border-transparent shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             <span>Launch Agent Studio</span>
-            <ArrowRight className="w-4 h-4 text-zinc-950" aria-hidden="true" />
+            <ArrowRight className="w-4 h-4 text-white" aria-hidden="true" />
           </button>
         </div>
       </section>

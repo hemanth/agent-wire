@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-[#09090b] text-zinc-100 antialiased;
+    @apply bg-[#F8FAFC] text-zinc-900 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
@@ -15,14 +15,14 @@
   height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #09090b;
+  background: #F1F5F9;
 }
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: #CBD5E1;
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: #94A3B8;
 }
 
 .mono-tag {

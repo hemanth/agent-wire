@@ -17,24 +17,24 @@ export const TerminalSection: React.FC = () => {
   return (
     <section className="space-y-4 pt-8">
       <div className="text-center max-w-2xl mx-auto space-y-2">
-        <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
+        <h2 className="text-xl sm:text-2xl font-bold text-zinc-950 tracking-tight">
           Universal Terminal & API Integration
         </h2>
-        <p className="text-xs sm:text-sm text-zinc-400">
+        <p className="text-xs sm:text-sm text-zinc-600">
           Any system that can send an HTTP POST request can execute your deployed agent fleet.
         </p>
       </div>
 
-      <div className="max-w-3xl mx-auto rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden font-mono text-xs shadow-xl">
+      <div className="max-w-3xl mx-auto rounded-xl border border-zinc-700/80 bg-[#0F172A] overflow-hidden font-mono text-xs shadow-xl ring-1 ring-black/5">
         {/* Terminal Title Bar */}
-        <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-900/80 border-b border-zinc-800 text-zinc-400">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-[#1E293B] border-b border-zinc-700/80 text-zinc-300">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
-              <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
-              <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
             </div>
-            <span className="text-[11px] text-zinc-400 ml-2">bash - AgentWire Curl Execution</span>
+            <span className="text-[11px] text-zinc-300 ml-2 font-semibold">bash - AgentWire Curl Execution</span>
           </div>
 
           <button
