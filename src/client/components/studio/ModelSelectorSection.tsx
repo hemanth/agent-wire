@@ -7,13 +7,17 @@ interface ModelSelectorSectionProps {
   onToggleModel: (modelId: string) => void;
   openRouterKey: string | null;
   onOpenAuthModal: () => void;
+  maxTokens?: number;
+  setMaxTokens?: (val: number) => void;
 }
 
 export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
   selectedModels,
   onToggleModel,
   openRouterKey,
-  onOpenAuthModal
+  onOpenAuthModal,
+  maxTokens = 2048,
+  setMaxTokens
 }) => {
   return (
     <section aria-labelledby="section-models-title" className="rounded-2xl border border-white/10 bg-[#0C0F17] p-5 sm:p-6 space-y-4">
@@ -21,7 +25,7 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
           <Layers className="w-4 h-4 text-indigo-400" aria-hidden="true" />
           <h2 id="section-models-title" className="text-sm font-semibold text-white">
-            2. OpenRouter Model Fallback Chain
+            2. OpenRouter Model Fallback Chain & Token Budget
           </h2>
         </div>
         {!openRouterKey && (
@@ -88,6 +92,30 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* Max output tokens control */}
+      <div className="pt-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="text-slate-400">
+          <span className="font-semibold text-slate-300">Max Output Tokens:</span>{' '}
+          <span className="text-[11px] text-slate-400">Limits credit reservation to avoid OpenRouter 402 on low balances</span>
+        </div>
+        <div className="flex items-center gap-1.5 font-mono" role="group" aria-label="Max token limits">
+          {[1024, 2048, 4096].map(limit => (
+            <button
+              key={limit}
+              type="button"
+              onClick={() => setMaxTokens?.(limit)}
+              className={`px-2.5 py-1 rounded-lg border text-[11px] transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                maxTokens === limit
+                  ? 'border-indigo-500/50 bg-indigo-500/20 text-indigo-300 font-semibold'
+                  : 'border-white/10 bg-black/20 text-slate-400 hover:text-white'
+              }`}
+            >
+              {limit} tokens
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );

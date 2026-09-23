@@ -178,6 +178,7 @@ export default {
           systemPrompt: body.systemPrompt || '',
           models: body.models && body.models.length > 0 ? body.models : ['anthropic/claude-3.5-sonnet', 'google/gemini-2.5-flash'],
           temperature: typeof body.temperature === 'number' ? body.temperature : 0.4,
+          maxTokens: typeof body.maxTokens === 'number' ? body.maxTokens : 2048,
           mcps: body.mcps || [],
           skills: body.skills || [],
           openRouterKey: body.openRouterKey || undefined,
@@ -352,6 +353,7 @@ export default {
 
       let finalResult = '';
       let modelUsed = agent.models[0] || 'anthropic/claude-3.5-sonnet';
+      const effectiveMaxTokens = (payload as any).max_tokens || (payload as any).maxTokens || agent.maxTokens || 2048;
 
       if (apiKey) {
         // Execute real LLM request via OpenRouter with auto-fallback list!
@@ -364,7 +366,8 @@ export default {
           const openRouterPayload: any = {
             models: agent.models, // OpenRouter auto-switches if primary is unavailable!
             messages,
-            temperature: agent.temperature
+            temperature: agent.temperature,
+            max_tokens: effectiveMaxTokens
           };
 
           if (openRouterTools.length > 0) {
@@ -384,6 +387,14 @@ export default {
 
           if (!llmRes.ok) {
             const errText = await llmRes.text();
+            let parsedErr: any = null;
+            try {
+              parsedErr = JSON.parse(errText);
+            } catch {}
+            if (llmRes.status === 402) {
+              const msg = parsedErr?.error?.message || errText;
+              throw new Error(`OpenRouter Credit Limit (402): ${msg}`);
+            }
             throw new Error(`OpenRouter returned ${llmRes.status}: ${errText}`);
           }
 
@@ -443,7 +454,8 @@ export default {
               body: JSON.stringify({
                 models: agent.models,
                 messages,
-                temperature: agent.temperature
+                temperature: agent.temperature,
+                max_tokens: effectiveMaxTokens
               })
             });
 

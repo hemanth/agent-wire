@@ -35,6 +35,7 @@ export interface Agent {
   systemPrompt: string;
   models: string[]; // OpenRouter auto-fallback model list
   temperature: number;
+  maxTokens?: number;
   mcps: McpConnector[];
   skills: AttachedSkill[];
   openRouterKey?: string;
@@ -49,6 +50,8 @@ export interface RunAgentRequest {
   prompt?: string;
   messages?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   stream?: boolean;
+  max_tokens?: number;
+  maxTokens?: number;
 }
 
 export interface ToolExecutionStep {

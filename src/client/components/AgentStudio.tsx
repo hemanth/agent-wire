@@ -31,6 +31,7 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
     'google/gemini-2.5-flash',
     'meta-llama/llama-3.3-70b-instruct'
   ]);
+  const [maxTokens, setMaxTokens] = useState<number>(2048);
 
   const [mcps, setMcps] = useState<McpConnector[]>([PRESET_MCPS[0]]);
   const [probingMcpId, setProbingMcpId] = useState<string | null>(null);
@@ -109,6 +110,7 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
         systemPrompt: systemPrompt.trim(),
         models: selectedModels,
         temperature: 0.3,
+        maxTokens,
         mcps,
         skills,
         openRouterKey: openRouterKey || undefined
@@ -169,6 +171,8 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
           onToggleModel={toggleModel}
           openRouterKey={openRouterKey}
           onOpenAuthModal={onOpenAuthModal}
+          maxTokens={maxTokens}
+          setMaxTokens={setMaxTokens}
         />
 
         <McpConnectorsSection
