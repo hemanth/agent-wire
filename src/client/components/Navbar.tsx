@@ -1,9 +1,9 @@
 import React from 'react';
-import { Bot, Plus, Key, Radio } from 'lucide-react';
+import { Bot, Plus, Key, Radio, Compass } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'fleet' | 'studio';
-  setActiveTab: (tab: 'fleet' | 'studio') => void;
+  activeTab: 'landing' | 'fleet' | 'studio';
+  setActiveTab: (tab: 'landing' | 'fleet' | 'studio') => void;
   agentCount: number;
   openRouterKey: string | null;
   onOpenAuthModal: () => void;
@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Brand */}
         <button
           type="button"
-          onClick={() => setActiveTab('fleet')}
+          onClick={() => setActiveTab('landing')}
           className="flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded-lg p-1 -m-1"
         >
           <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-200">
@@ -48,9 +48,22 @@ export const Navbar: React.FC<NavbarProps> = ({
         <nav aria-label="Main Views" className="flex items-center bg-zinc-900 p-0.5 rounded-lg border border-zinc-800" role="tablist">
           <button
             role="tab"
+            aria-selected={activeTab === 'landing'}
+            onClick={() => setActiveTab('landing')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+              activeTab === 'landing'
+                ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/60 shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Overview</span>
+          </button>
+          <button
+            role="tab"
             aria-selected={activeTab === 'fleet'}
             onClick={() => setActiveTab('fleet')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
               activeTab === 'fleet'
                 ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/60 shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
@@ -63,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             role="tab"
             aria-selected={activeTab === 'studio'}
             onClick={() => setActiveTab('studio')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
               activeTab === 'studio'
                 ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/60 shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'

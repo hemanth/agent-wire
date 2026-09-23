@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar.tsx';
+import { LandingPage } from './components/landing/LandingPage.tsx';
 import { AgentFleet } from './components/AgentFleet.tsx';
 import { AgentStudio } from './components/AgentStudio.tsx';
 import { AgentRunnerModal } from './components/AgentRunnerModal.tsx';
@@ -11,7 +12,7 @@ import { CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>(STARTER_AGENTS);
-  const [activeTab, setActiveTab] = useState<'fleet' | 'studio'>('fleet');
+  const [activeTab, setActiveTab] = useState<'landing' | 'fleet' | 'studio'>('landing');
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [openRouterKey, setOpenRouterKey] = useState<string | null>(() => getStoredApiKey());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -138,7 +139,15 @@ export const App: React.FC = () => {
       )}
 
       <main className="flex-1">
-        {activeTab === 'fleet' ? (
+        {activeTab === 'landing' ? (
+          <LandingPage
+            agents={agents}
+            onSelectAgent={setSelectedAgent}
+            onDeleteAgent={handleDeleteAgent}
+            onGoToStudio={() => setActiveTab('studio')}
+            onGoToFleet={() => setActiveTab('fleet')}
+          />
+        ) : activeTab === 'fleet' ? (
           <AgentFleet
             agents={agents}
             onSelectAgent={setSelectedAgent}
