@@ -5,6 +5,7 @@ import { AgentFleet } from './components/AgentFleet.tsx';
 import { AgentStudio } from './components/AgentStudio.tsx';
 import { AgentRunnerModal } from './components/AgentRunnerModal.tsx';
 import { OpenRouterModal } from './components/OpenRouterModal.tsx';
+import { ApiKeysModal } from './components/ApiKeysModal.tsx';
 import { Agent } from '../types.ts';
 import { STARTER_AGENTS } from '../presets.ts';
 import { getStoredApiKey, setStoredApiKey, clearStoredApiKey, exchangeOAuthCode } from './lib/openrouter-auth.ts';
@@ -16,6 +17,7 @@ export const App: React.FC = () => {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [openRouterKey, setOpenRouterKey] = useState<string | null>(() => getStoredApiKey());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isKeysModalOpen, setIsKeysModalOpen] = useState(false);
   const [authBanner, setAuthBanner] = useState<{ type: 'loading' | 'success' | 'error'; message: string } | null>(null);
 
   // Load agents from backend API
@@ -100,13 +102,14 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col text-zinc-900">
+    <div className="min-h-screen bg-[#FAFAFA] flex flex-col text-zinc-900">
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         agentCount={agents.length}
         openRouterKey={openRouterKey}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenKeysModal={() => setIsKeysModalOpen(true)}
       />
 
       {/* Auth Banner Feedback */}
@@ -116,16 +119,16 @@ export const App: React.FC = () => {
           aria-live="polite"
           className={`px-4 py-2.5 text-xs font-mono border-b flex items-center justify-between transition-all ${
             authBanner.type === 'loading'
-              ? 'bg-[#E4C1F9]/30 border-[#D29EFA] text-purple-950'
+              ? 'bg-zinc-100 border-zinc-200 text-zinc-900'
               : authBanner.type === 'success'
-              ? 'bg-[#D3F8E2]/60 border-[#A5E5BF] text-emerald-950'
-              : 'bg-[#F694C1]/30 border-[#F173B0] text-rose-950'
+              ? 'bg-white border-zinc-300 text-zinc-950'
+              : 'bg-rose-50 border-rose-200 text-rose-900'
           }`}
         >
           <div className="max-w-7xl mx-auto flex items-center gap-2 flex-1">
-            {authBanner.type === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-700 shrink-0" />}
-            {authBanner.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />}
-            {authBanner.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-700 shrink-0" />}
+            {authBanner.type === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600 shrink-0" />}
+            {authBanner.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+            {authBanner.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
             <span className="font-medium">{authBanner.message}</span>
           </div>
           <button
@@ -180,6 +183,12 @@ export const App: React.FC = () => {
           onClose={() => setIsAuthModalOpen(false)}
         />
       )}
+
+      {/* API Keys & Permissions Modal */}
+      <ApiKeysModal
+        isOpen={isKeysModalOpen}
+        onClose={() => setIsKeysModalOpen(false)}
+      />
     </div>
   );
 };

@@ -4,6 +4,8 @@ import { Agent, RunAgentResponse } from '../../types.ts';
 import { CurlSnippet } from './CurlSnippet.tsx';
 import { TelemetryBar } from './runner/TelemetryBar.tsx';
 import { ExecutionTrace } from './runner/ExecutionTrace.tsx';
+import { RunHistoryView } from './runner/RunHistoryView.tsx';
+import { SessionBar } from './runner/SessionBar.tsx';
 import { useModalA11y } from '../hooks/useModalA11y.ts';
 
 interface AgentRunnerModalProps {
@@ -13,40 +15,53 @@ interface AgentRunnerModalProps {
 }
 
 export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClose, openRouterKey }) => {
+  const [activeTab, setActiveTab] = useState<'runner' | 'history'>('runner');
   const [task, setTask] = useState('Inspect the latest components and verify high contrast and typography hierarchy.');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<RunAgentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Stateful Session, Memory & Multi-turn History state
+  const [sessionEnabled, setSessionEnabled] = useState(false);
+  const [sessionId, setSessionId] = useState(`ses_${Math.random().toString(36).substring(2, 8)}`);
+  const [memory, setMemory] = useState<Record<string, any>>({});
+  const [messagesCount, setMessagesCount] = useState(0);
+
   const modalRef = useModalA11y<HTMLDivElement>({ isOpen: true, onClose });
+
+  const handleResetSession = async () => {
+    if (sessionId) {
+      await fetch(`/api/agents/${agent.id}/sessions/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    setMessagesCount(0);
+    setMemory({});
+    setResponse(null);
+    setSessionId(`ses_${Math.random().toString(36).substring(2, 8)}`);
+  };
 
   const handleRun = async () => {
     if (!task.trim() || loading) return;
     setLoading(true);
     setError(null);
-    setResponse(null);
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
-      if (openRouterKey) {
-        headers['Authorization'] = `Bearer ${openRouterKey}`;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (openRouterKey) headers['Authorization'] = `Bearer ${openRouterKey}`;
+      const payload: any = { task };
+      if (sessionEnabled) {
+        payload.sessionId = sessionId;
+        if (Object.keys(memory).length > 0) payload.memory = memory;
       }
 
-      const res = await fetch(`/api/agents/${agent.id}/run`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ task })
-      });
-
+      const res = await fetch(`/api/agents/${agent.id}/run`, { method: 'POST', headers, body: JSON.stringify(payload) });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || `HTTP ${res.status}: ${res.statusText}`);
       }
-
       const data: RunAgentResponse = await res.json();
       setResponse(data);
+      if (typeof data.sessionMessagesCount === 'number') setMessagesCount(data.sessionMessagesCount);
+      if (data.memory) setMemory(data.memory);
     } catch (err: any) {
       setError(err.message || 'Execution failed');
     } finally {
@@ -55,133 +70,122 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="runner-modal-title"
-      ref={modalRef}
-    >
-      <div className="bg-[#111113] border border-zinc-800 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-zinc-950/40 backdrop-blur-md flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="runner-modal-title" ref={modalRef}>
+      <div className="bg-white/95 backdrop-blur-xl border border-white/80 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/40">
+        {/* Header with Tab switcher */}
+        <div className="flex items-center justify-between px-6 py-3.5 border-b border-zinc-200 bg-zinc-50">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 shrink-0">
-              <Play className="w-3.5 h-3.5 fill-zinc-300" aria-hidden="true" />
+            <div className="w-8 h-8 rounded-lg bg-zinc-950 flex items-center justify-center text-white shrink-0">
+              <Play className="w-3.5 h-3.5 fill-white text-white" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 id="runner-modal-title" className="font-semibold text-zinc-100 text-base">
-                  {agent.name}
-                </h2>
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
-                  {agent.id}
-                </span>
+                <h2 id="runner-modal-title" className="font-bold text-zinc-950 text-base">{agent.name}</h2>
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-700 font-semibold">{agent.id}</span>
               </div>
-              <p className="text-xs text-zinc-400 truncate max-w-md">
-                {agent.tagline || 'Interactive Sandbox & Curl Runner'}
-              </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close runner modal"
-            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center bg-zinc-200/80 p-0.5 rounded-lg text-xs font-mono">
+              <button type="button" onClick={() => setActiveTab('runner')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'runner' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-600 hover:text-zinc-900'}`}>Sandbox</button>
+              <button type="button" onClick={() => setActiveTab('history')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'history' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-600 hover:text-zinc-900'}`}>History & Traces</button>
+            </div>
+            <button onClick={onClose} aria-label="Close runner modal" className="p-1.5 rounded-lg hover:bg-black/5 text-zinc-500 hover:text-zinc-950 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400">
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          
-          {/* Section 1: cURL Snippet */}
-          <section aria-labelledby="curl-label">
-            <h3 id="curl-label" className="text-xs font-mono text-zinc-400 mb-2 uppercase tracking-wider">
-              1. Direct cURL Command
-            </h3>
-            <CurlSnippet agentId={agent.id} agentName={agent.name} task={task} />
-          </section>
-
-          {/* Section 2: In-Browser Runner */}
-          <section aria-labelledby="sandbox-label">
-            <div className="flex items-center justify-between mb-2">
-              <label htmlFor="task-prompt-input" id="sandbox-label" className="block text-xs font-mono text-zinc-400 uppercase tracking-wider">
-                2. Test In-Browser Sandbox
-              </label>
-              <span className="text-[11px] text-zinc-500 font-mono">Press Cmd+Enter to run</span>
-            </div>
-            <div className="relative">
-              <textarea
-                id="task-prompt-input"
-                value={task}
-                onChange={e => setTask(e.target.value)}
-                onKeyDown={e => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                    handleRun();
-                  }
-                }}
-                rows={3}
-                placeholder="Enter task or instruction for this agent..."
-                className="w-full rounded-lg bg-zinc-950 border border-zinc-800 p-3 pb-12 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 focus-visible:ring-1 focus-visible:ring-zinc-400 font-mono resize-none"
+          {activeTab === 'history' ? (
+            <RunHistoryView agentId={agent.id} />
+          ) : (
+            <>
+              {/* Session, Multi-turn History & Memory Controls */}
+              <SessionBar
+                enabled={sessionEnabled}
+                onToggle={setSessionEnabled}
+                sessionId={sessionId}
+                onSessionIdChange={setSessionId}
+                messagesCount={messagesCount}
+                memory={memory}
+                onMemoryChange={setMemory}
+                onResetSession={handleResetSession}
               />
-              <button
-                onClick={handleRun}
-                disabled={loading || !task.trim()}
-                aria-busy={loading}
-                className="absolute right-3 bottom-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-100 hover:bg-white active:bg-zinc-200 disabled:opacity-40 text-zinc-950 text-xs font-medium transition-colors border border-transparent shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-950" aria-hidden="true" />
-                    <span>Executing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-zinc-950 text-zinc-950" aria-hidden="true" />
-                    <span>Run Task</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </section>
 
-          {/* Error Message */}
-          {error && (
-            <div role="alert" className="p-3.5 rounded-lg bg-red-950/40 border border-red-900/60 text-red-300 text-xs font-mono">
-              <strong>Execution Error:</strong> {error}
-            </div>
-          )}
+              {/* Direct cURL / Code Command */}
+              <section aria-labelledby="curl-label">
+                <h3 id="curl-label" className="text-xs font-mono text-zinc-500 mb-2 uppercase tracking-wider font-semibold">1. Direct cURL Command</h3>
+                <CurlSnippet agentId={agent.id} agentName={agent.name} task={task} sessionId={sessionEnabled ? sessionId : undefined} memory={sessionEnabled ? memory : undefined} />
+              </section>
 
-          {/* Results Area */}
-          {response && (
-            <div className="space-y-4 animate-in fade-in duration-150" aria-live="polite">
-              <TelemetryBar response={response} />
-              <ExecutionTrace steps={response.steps} />
-
-              {/* Agent Output Card */}
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-                <div className="flex items-center gap-2 mb-2 text-zinc-400 text-xs font-mono uppercase tracking-wider">
-                  <Bot className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />
-                  <span>Agent Output</span>
+              {/* In-Browser Sandbox */}
+              <section aria-labelledby="sandbox-label">
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="task-prompt-input" id="sandbox-label" className="block text-xs font-mono text-zinc-500 uppercase tracking-wider font-semibold">2. Test In-Browser Sandbox</label>
+                  <span className="text-[11px] text-zinc-500 font-mono">Press Cmd+Enter to run</span>
                 </div>
-                <div className="text-sm text-zinc-200 whitespace-pre-wrap font-sans leading-relaxed">
-                  {response.result}
+                <div className="relative">
+                  <textarea
+                    id="task-prompt-input"
+                    value={task}
+                    onChange={e => setTask(e.target.value)}
+                    onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleRun(); }}
+                    rows={3}
+                    placeholder="Enter task or instruction for this agent..."
+                    className="w-full rounded-lg bg-white border border-zinc-300 p-3 pb-12 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-500 focus-visible:ring-1 focus-visible:ring-zinc-400 font-mono resize-none shadow-2xs"
+                  />
+                  <button
+                    onClick={handleRun}
+                    disabled={loading || !task.trim()}
+                    aria-busy={loading}
+                    className="absolute right-3 bottom-3 flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-950 hover:bg-black active:bg-zinc-800 disabled:opacity-40 text-white text-xs font-medium transition-colors border border-transparent shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  >
+                    {loading ? (<><Loader2 className="w-3.5 h-3.5 animate-spin text-white" aria-hidden="true" /><span>Executing...</span></>) : (<><Play className="w-3.5 h-3.5 fill-white text-white" aria-hidden="true" /><span>Run Task</span></>)}
+                  </button>
                 </div>
-              </div>
-            </div>
-          )}
+              </section>
 
+              {error && (
+                <div role="alert" className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs font-mono">
+                  <strong>Execution Error:</strong> {error}
+                </div>
+              )}
+
+              {response && (
+                <div className="space-y-4 animate-in fade-in duration-150" aria-live="polite">
+                  <TelemetryBar response={response} />
+                  <ExecutionTrace steps={response.steps} />
+
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 shadow-2xs">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 text-zinc-950 text-xs font-mono uppercase tracking-wider font-bold">
+                        <Bot className="w-3.5 h-3.5 text-zinc-700" aria-hidden="true" />
+                        <span>Agent Output</span>
+                      </div>
+                      {response.sessionId && (
+                        <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-zinc-200 text-zinc-800 font-semibold">
+                          Session: {response.sessionId} ({response.sessionMessagesCount ?? 0} msgs)
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-zinc-950 whitespace-pre-wrap font-sans leading-relaxed">
+                      {response.result}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-900/40 flex items-center justify-between text-xs text-zinc-400">
-          <span>Endpoint: <code className="font-mono text-zinc-300 bg-zinc-900 border border-zinc-800 px-1 py-0.5 rounded">/api/agents/{agent.id}/run</code></span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          >
+        <div className="px-6 py-3 border-t border-zinc-200 bg-zinc-50 flex items-center justify-between text-xs text-zinc-600">
+          <span>Endpoint: <code className="font-mono text-zinc-900 bg-white border border-zinc-200 px-1.5 py-0.5 rounded shadow-2xs">/api/agents/{agent.id}/run</code></span>
+          <button onClick={onClose} className="px-4 py-1.5 rounded-lg bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300 transition-colors shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400">
             Close
           </button>
         </div>

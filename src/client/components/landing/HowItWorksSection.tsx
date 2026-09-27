@@ -1,5 +1,6 @@
 import React from 'react';
 import { Layers, Bot, Terminal } from 'lucide-react';
+import { CodeBlock } from '../CodeBlock';
 
 export const HowItWorksSection: React.FC = () => {
   const steps = [
@@ -7,8 +8,8 @@ export const HowItWorksSection: React.FC = () => {
       num: '01',
       title: 'Define Persona & Remote MCPs',
       desc: 'Set the agent system prompt and attach any remote MCP server endpoint (SSE or HTTP). AgentWire auto-probes the tool list.',
-      color: '#A9DEF9',
       icon: Bot,
+      lang: 'javascript' as const,
       snippet: `// Configure Remote MCP Connector
 POST /api/mcp/probe
 { "url": "https://mcp.stitch.dev/sse" }
@@ -18,8 +19,8 @@ POST /api/mcp/probe
       num: '02',
       title: 'Attach Skills & Model Fallbacks',
       desc: 'Inject domain-specific SKILL.md rules (e.g. Taste Skills) and define fallback order across Claude 3.5, Gemini 2.5, and Llama 3.3.',
-      color: '#E4C1F9',
       icon: Layers,
+      lang: 'javascript' as const,
       snippet: `// Fallback Chain & Skill Injection
 models: [
   "anthropic/claude-3.5-sonnet",
@@ -31,8 +32,8 @@ skills: ["taste-skill", "code-review"]`
       num: '03',
       title: 'Deploy Edge URL & Curl Anywhere',
       desc: 'Click Deploy to get a permanent edge URL. Trigger tasks via cURL, Python requests, or fetch() with multi-turn tool calling.',
-      color: '#F694C1',
       icon: Terminal,
+      lang: 'bash' as const,
       snippet: `curl -X POST https://agentwire.edge/api/agents/taste-critic/run \\
   -H "Content-Type: application/json" \\
   -d '{"task": "Audit this UI against high contrast rules"}'`
@@ -56,23 +57,14 @@ skills: ["taste-skill", "code-review"]`
           return (
             <div
               key={step.num}
-              className="rounded-xl border bg-white p-5 flex flex-col justify-between space-y-4 shadow-xs hover:shadow-md transition-all"
-              style={{
-                borderColor: `${step.color}`
-              }}
+              className="rounded-2xl border border-zinc-200/90 bg-white p-6 flex flex-col justify-between space-y-5 shadow-2xs hover:border-zinc-300 transition-all"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span
-                    className="font-mono text-xs font-bold px-2 py-0.5 rounded border text-zinc-950"
-                    style={{
-                      backgroundColor: `${step.color}50`,
-                      borderColor: `${step.color}`
-                    }}
-                  >
+                  <span className="font-mono text-xs font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-700">
                     STEP {step.num}
                   </span>
-                  <Icon className="w-4 h-4 text-zinc-500" aria-hidden="true" />
+                  <Icon className="w-4 h-4 text-zinc-400" aria-hidden="true" />
                 </div>
 
                 <h3 className="font-bold text-sm text-zinc-950">
@@ -84,8 +76,8 @@ skills: ["taste-skill", "code-review"]`
                 </p>
               </div>
 
-              <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-3 text-[11px] font-mono text-zinc-100 overflow-x-auto leading-relaxed shadow-xs">
-                <pre className="whitespace-pre">{step.snippet}</pre>
+              <div className="rounded-xl bg-zinc-950 border border-zinc-850 p-3.5 text-[11px] font-mono text-zinc-200 overflow-x-auto leading-relaxed shadow-2xs">
+                <CodeBlock code={step.snippet} language={step.lang} className="whitespace-pre text-[11px]" />
               </div>
             </div>
           );

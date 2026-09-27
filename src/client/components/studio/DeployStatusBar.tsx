@@ -13,23 +13,23 @@ export const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
   error
 }) => {
   return (
-    <div className="space-y-4 pt-4 border-t border-zinc-800">
+    <div className="space-y-4 pt-6 border-t border-zinc-200/80">
       {error && (
         <div
           role="alert"
-          className="flex items-center gap-2 p-3.5 rounded-lg bg-red-950/40 border border-red-900/60 text-red-300 text-xs font-mono"
+          className="flex items-center gap-2 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-mono shadow-2xs"
         >
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-400" aria-hidden="true" />
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="text-xs text-zinc-400 font-mono flex items-center gap-1.5">
-          <Terminal className="w-3.5 h-3.5 text-zinc-500" aria-hidden="true" />
+        <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
+          <Terminal className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />
           <span>
-            Output:{' '}
-            <code className="text-zinc-200 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded">
+            Target Endpoint:{' '}
+            <code className="text-zinc-900 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded-md font-semibold">
               POST /api/agents/:id/run
             </code>
           </span>
@@ -39,17 +39,17 @@ export const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
           type="submit"
           disabled={deploying || !canDeploy}
           aria-busy={deploying}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-zinc-100 hover:bg-white active:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-medium text-sm transition-colors border border-transparent shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          className="flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-zinc-950 hover:bg-black active:bg-zinc-850 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm transition-all border border-transparent shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 active:scale-[0.98]"
         >
           {deploying ? (
             <>
-              <RefreshCw className="w-4 h-4 animate-spin text-zinc-900" aria-hidden="true" />
+              <RefreshCw className="w-4 h-4 animate-spin text-white" aria-hidden="true" />
               <span>Deploying Agent...</span>
             </>
           ) : (
             <>
               <span>Deploy Agent Endpoint</span>
-              <ArrowRight className="w-4 h-4 text-zinc-900" aria-hidden="true" />
+              <ArrowRight className="w-4 h-4 text-white" aria-hidden="true" />
             </>
           )}
         </button>

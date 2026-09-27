@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Wrench, BookOpen, Activity, Terminal, Check, Trash2 } from 'lucide-react';
+import { Layers, Wrench, BookOpen, Activity, Terminal, Check, Trash2, Globe, Lock } from 'lucide-react';
 import { Agent } from '../../../types.ts';
 
 interface AgentCardProps {
@@ -44,7 +44,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onDelete 
       className="group rounded-xl border border-zinc-200/90 bg-white hover:border-zinc-300 hover:shadow-md transition-all p-5 flex flex-col justify-between cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 shadow-xs"
     >
       <div>
-        {/* Top Row: Name + Live badge */}
+        {/* Top Row: Name + Live and Visibility badges */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-zinc-950 truncate text-base transition-colors">
@@ -54,9 +54,22 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onDelete 
               {agent.tagline || 'Custom MCP Agent'}
             </p>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#D3F8E2]/60 border border-[#A5E5BF] text-emerald-950 text-[10px] font-mono whitespace-nowrap shrink-0 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" aria-hidden="true" />
-            <span>Live</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {agent.visibility === 'private' ? (
+              <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-medium">
+                <Lock className="w-2.5 h-2.5 text-amber-600" aria-hidden="true" />
+                <span>Private</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-600 font-medium">
+                <Globe className="w-2.5 h-2.5 text-zinc-500" aria-hidden="true" />
+                <span>Public</span>
+              </span>
+            )}
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-700 text-[10px] font-mono whitespace-nowrap font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+              <span>Live</span>
+            </div>
           </div>
         </div>
 
@@ -119,14 +132,20 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onDelete 
               </>
             )}
           </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            aria-label={`Delete agent ${agent.name}`}
-            className="p-1.5 rounded-md hover:bg-rose-50 text-zinc-400 hover:text-rose-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          >
-            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-          </button>
+          {agent.isProtected ? (
+            <span className="p-1.5 text-zinc-300 cursor-not-allowed" title="Starter agent is protected">
+              <Trash2 className="w-3.5 h-3.5 opacity-30" aria-hidden="true" />
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleDelete}
+              aria-label={`Delete agent ${agent.name}`}
+              className="p-1.5 rounded-md hover:bg-rose-50 text-zinc-400 hover:text-rose-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            >
+              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
     </article>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, Check, Terminal, Play, CheckCircle2 } from 'lucide-react';
+import { CodeBlock } from '../CodeBlock';
 
 export const TerminalSection: React.FC = () => {
   const [copied, setCopied] = useState(false);
@@ -59,40 +60,44 @@ export const TerminalSection: React.FC = () => {
         <div className="p-4 sm:p-5 space-y-4 leading-relaxed overflow-x-auto text-zinc-300">
           <div>
             <div className="text-zinc-500 mb-1"># 1. Dispatch request from anywhere</div>
-            <pre className="text-zinc-100">{curlCommand}</pre>
+            <CodeBlock code={curlCommand} language="bash" className="text-xs" />
           </div>
 
           <div className="pt-2 border-t border-zinc-900 space-y-1.5 text-[11px]">
             <div className="text-zinc-500 mb-1"># 2. AgentWire serverless edge response</div>
-            <div className="flex items-center gap-2 text-[#D3F8E2]">
+            <div className="flex items-center gap-2 text-emerald-400">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>HTTP/1.1 200 OK (latency: 1.18s, cold_start: 0ms)</span>
             </div>
-            <div className="text-[#A9DEF9]">
-              <span>&gt; MCP Tool Discovered: </span>
-              <span className="underline">stitch_inspect_screen</span>
+            <div className="text-zinc-300">
+              <span className="text-zinc-500">&gt; MCP Tool Discovered: </span>
+              <span className="text-emerald-300 underline">stitch_inspect_screen</span>
             </div>
-            <div className="text-[#E4C1F9]">
-              <span>&gt; Model Fallback Chain: </span>
-              <span>claude-3.5-sonnet (active)</span>
+            <div className="text-zinc-300">
+              <span className="text-zinc-500">&gt; Model Fallback Chain: </span>
+              <span className="text-zinc-200">claude-3.5-sonnet (active)</span>
             </div>
-            <div className="text-[#EDE7B1]">
-              <span>&gt; Applied Skill: </span>
-              <span>taste-skill (high contrast, typographic balance enforced)</span>
+            <div className="text-zinc-300">
+              <span className="text-zinc-500">&gt; Applied Skill: </span>
+              <span className="text-zinc-200">taste-skill (high contrast, typographic balance enforced)</span>
             </div>
           </div>
 
           <div className="pt-2 border-t border-zinc-900">
             <div className="text-zinc-500 mb-1"># 3. Parsed JSON output</div>
-            <pre className="text-emerald-300 bg-black/40 p-3 rounded-lg border border-zinc-800/80 overflow-x-auto">
-{`{
+            <div className="bg-black/50 p-3 rounded-lg border border-zinc-800/80 overflow-x-auto">
+              <CodeBlock
+                code={`{
   "agent": "taste-critic",
   "status": "completed",
   "modelUsed": "anthropic/claude-3.5-sonnet",
   "toolsUsed": ["stitch_inspect_screen"],
-  "result": "UI Audit Complete: All components satisfy WCAG AA contrast. AI-slop tropes (pulsing dots, gradient text) eliminated."
+  "result": "UI Audit Complete: All components satisfy WCAG AA contrast. AI-slop tropes eliminated."
 }`}
-            </pre>
+                language="json"
+                className="text-xs"
+              />
+            </div>
           </div>
         </div>
       </div>

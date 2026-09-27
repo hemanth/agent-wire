@@ -36,18 +36,15 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
   const [mcps, setMcps] = useState<McpConnector[]>([PRESET_MCPS[0]]);
   const [probingMcpId, setProbingMcpId] = useState<string | null>(null);
   const [skills, setSkills] = useState<AttachedSkill[]>(BUILTIN_SKILLS);
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
 
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const toggleModel = (modelId: string) => {
-    if (selectedModels.includes(modelId)) {
-      if (selectedModels.length > 1) {
-        setSelectedModels(selectedModels.filter(m => m !== modelId));
-      }
-    } else {
-      setSelectedModels([...selectedModels, modelId]);
-    }
+    setSelectedModels(prev =>
+      prev.includes(modelId) ? (prev.length > 1 ? prev.filter(m => m !== modelId) : prev) : [...prev, modelId]
+    );
   };
 
   const probeMcp = async (id: string, url: string) => {
@@ -59,13 +56,7 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
         body: JSON.stringify({ url })
       });
       const data = await res.json();
-      setMcps(prev =>
-        prev.map(m =>
-          m.id === id
-            ? { ...m, status: data.success ? 'connected' : 'error', tools: data.tools || m.tools || [], errorMessage: data.error }
-            : m
-        )
-      );
+      setMcps(prev => prev.map(m => m.id === id ? { ...m, status: data.success ? 'connected' : 'error', tools: data.tools || m.tools || [], errorMessage: data.error } : m));
     } catch (err: any) {
       setMcps(prev => prev.map(m => (m.id === id ? { ...m, status: 'error', errorMessage: err.message } : m)));
     } finally {
@@ -113,6 +104,7 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
         maxTokens,
         mcps,
         skills,
+        visibility,
         openRouterKey: openRouterKey || undefined
       };
 
@@ -139,15 +131,15 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8 animate-in fade-in duration-150">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-200/80">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100 tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-zinc-950 tracking-tight flex items-center gap-2.5">
             Agent Studio
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
+            <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200 font-semibold">
               Edge Deployer
             </span>
           </h1>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs sm:text-sm text-zinc-600 mt-1">
             Configure persona, remote MCP tools, and skills, then click deploy to generate a live curlable REST endpoint.
           </p>
         </div>
@@ -164,6 +156,8 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
           setTagline={setTagline}
           systemPrompt={systemPrompt}
           setSystemPrompt={setSystemPrompt}
+          visibility={visibility}
+          setVisibility={setVisibility}
         />
 
         <ModelSelectorSection

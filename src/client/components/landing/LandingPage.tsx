@@ -49,7 +49,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <button
             onClick={onGoToStudio}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-black text-white text-xs font-medium transition-colors border border-transparent shadow-xs self-start sm:self-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-zinc-950 hover:bg-black active:bg-zinc-850 text-white text-xs font-medium transition-all shadow-xs self-start sm:self-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 active:scale-[0.98]"
           >
             <span>+ Deploy New Agent</span>
           </button>
@@ -74,7 +74,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <TerminalSection />
 
       {/* 7. Bottom CTA */}
-      <section className="rounded-2xl border border-[#A5E5BF] bg-gradient-to-br from-[#D3F8E2]/50 via-white to-[#A9DEF9]/30 p-8 sm:p-12 text-center space-y-4 shadow-sm">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-8 sm:p-12 text-center space-y-4 shadow-xs">
         <h2 className="text-2xl sm:text-3xl font-bold text-zinc-950 tracking-tight">
           Ready to Deploy Your Own MCP Agent?
         </h2>
@@ -84,7 +84,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="pt-2">
           <button
             onClick={onGoToStudio}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-zinc-950 hover:bg-black text-white font-medium text-sm transition-colors border border-transparent shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-zinc-950 hover:bg-black active:bg-zinc-850 text-white font-medium text-sm transition-all shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 active:scale-[0.98]"
           >
             <span>Launch Agent Studio</span>
             <ArrowRight className="w-4 h-4 text-white" aria-hidden="true" />

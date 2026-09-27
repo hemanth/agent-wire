@@ -8,8 +8,8 @@ test.describe('Landing Page & Pastel Design System', () => {
 
     // 1. Verify Hero section title and value proposition
     const heroHeading = page.locator('h1');
-    await expect(heroHeading).toContainText('Turn Prompts & Remote MCP Servers into Instant');
-    await expect(heroHeading).toContainText('Curlable Endpoints');
+    await expect(heroHeading).toContainText('Your agent as a URL');
+    await expect(page.locator('body')).toContainText('curlable endpoint');
 
     // 2. Verify Coolors.co Architectural Palette Legend
     const legend = page.locator('text=System Architecture Color Map');

@@ -62,28 +62,24 @@ export const PaletteLegend: React.FC = () => {
         {PALETTE_TOKENS.map(token => (
           <div
             key={token.hex}
-            className="p-3 rounded-lg border flex flex-col justify-between shadow-xs transition-transform hover:-translate-y-0.5"
-            style={{
-              backgroundColor: `${token.hex}35`,
-              borderColor: `${token.hex}`
-            }}
+            className="p-3 rounded-xl border border-zinc-200/90 bg-white flex flex-col justify-between shadow-2xs hover:border-zinc-300 transition-all"
           >
             <div>
               <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                <span className="font-bold text-xs text-zinc-950 truncate">{token.role}</span>
+                <span className="font-semibold text-xs text-zinc-950 truncate">{token.role}</span>
                 <div
-                  className="w-3.5 h-3.5 rounded-full border border-black/25 shadow-xs shrink-0"
+                  className="w-2.5 h-2.5 rounded-full shadow-2xs shrink-0"
                   style={{ backgroundColor: token.hex }}
                   aria-hidden="true"
                 />
               </div>
-              <p className="text-[11px] text-zinc-800 font-medium leading-snug">
+              <p className="text-[11px] text-zinc-500 leading-snug">
                 {token.desc}
               </p>
             </div>
-            <div className="mt-2.5 pt-1.5 border-t border-black/10 flex items-center justify-between text-[10px] font-mono text-zinc-700 font-semibold">
+            <div className="mt-2.5 pt-1.5 border-t border-zinc-100 flex items-center justify-between text-[10px] font-mono text-zinc-400">
               <span>{token.name}</span>
-              <span className="text-zinc-950">{token.hex}</span>
+              <span className="text-zinc-600 font-medium">{token.hex}</span>
             </div>
           </div>
         ))}

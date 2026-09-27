@@ -20,27 +20,32 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
   setMaxTokens
 }) => {
   return (
-    <section aria-labelledby="section-models-title" className="rounded-xl border border-zinc-800 bg-[#111113] p-5 sm:p-6 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
-          <Layers className="w-4 h-4 text-zinc-400" aria-hidden="true" />
-          <h2 id="section-models-title" className="text-sm font-medium text-zinc-200">
-            2. OpenRouter Model Fallback Chain & Token Budget
-          </h2>
+    <section aria-labelledby="section-models-title" className="rounded-2xl border border-zinc-200/80 bg-white/90 backdrop-blur-sm p-6 sm:p-7 space-y-5 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-zinc-100 border border-zinc-200/80 flex items-center justify-center text-zinc-700 shadow-2xs shrink-0">
+            <Layers className="w-4 h-4 text-zinc-700" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 id="section-models-title" className="text-base font-bold text-zinc-950">
+              2. OpenRouter Model Fallback Chain & Token Budget
+            </h2>
+            <p className="text-xs text-zinc-500">Auto-failover order when primary provider is throttled or down</p>
+          </div>
         </div>
         {!openRouterKey && (
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 font-mono underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded self-start sm:self-auto"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-xs text-zinc-700 font-mono transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 self-start sm:self-auto shadow-2xs"
           >
-            <Key className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />
+            <Key className="w-3.5 h-3.5 text-zinc-500" aria-hidden="true" />
             Connect OpenRouter Key
           </button>
         )}
       </div>
 
-      <p className="text-xs text-zinc-400 leading-relaxed">
+      <p className="text-xs text-zinc-600 leading-relaxed">
         Select models in priority order. OpenRouter automatically fails over to the next candidate if the primary model is unavailable or rate-limited.
       </p>
 
@@ -62,17 +67,17 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
                   onToggleModel(m.id);
                 }
               }}
-              className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+              className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 isSelected
-                  ? 'border-zinc-500 bg-zinc-900 text-zinc-100 shadow-sm'
-                  : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
+                  ? 'border-zinc-950 bg-zinc-50 text-zinc-950 ring-1 ring-zinc-950 shadow-2xs'
+                  : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 shadow-2xs'
               }`}
             >
               <div className="min-w-0 flex-1 pr-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-xs text-zinc-200 truncate">{m.name}</span>
+                  <span className="font-semibold text-xs text-zinc-900 truncate">{m.name}</span>
                   {isSelected && (
-                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-zinc-950 text-white font-bold shadow-2xs">
                       #{rank + 1}
                     </span>
                   )}
@@ -82,12 +87,12 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
                 </div>
               </div>
               <div
-                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                  isSelected ? 'border-zinc-100 bg-zinc-100' : 'border-zinc-700'
+                className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                  isSelected ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-300 bg-zinc-50'
                 }`}
                 aria-hidden="true"
               >
-                {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-zinc-950 fill-zinc-100" />}
+                {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
               </div>
             </div>
           );
@@ -95,9 +100,9 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
       </div>
 
       {/* Max output tokens control */}
-      <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="text-zinc-400">
-          <span className="font-medium text-zinc-300">Max Output Tokens:</span>{' '}
+      <div className="pt-4 border-t border-zinc-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="text-zinc-600">
+          <span className="font-semibold text-zinc-900">Max Output Tokens:</span>{' '}
           <span className="text-[11px] text-zinc-500">Limits credit reservation to avoid OpenRouter 402 on low balances</span>
         </div>
         <div className="flex items-center gap-1.5 font-mono" role="group" aria-label="Max token limits">
@@ -106,10 +111,10 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
               key={limit}
               type="button"
               onClick={() => setMaxTokens?.(limit)}
-              className={`px-2.5 py-1 rounded-md border text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+              className={`px-3 py-1.5 rounded-full border text-[11px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 maxTokens === limit
-                  ? 'border-zinc-500 bg-zinc-800 text-zinc-100 font-medium'
-                  : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                  ? 'border-zinc-900 bg-zinc-950 text-white font-medium shadow-2xs'
+                  : 'border-zinc-200 bg-white text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 shadow-2xs'
               }`}
             >
               {limit} tokens

@@ -42,24 +42,24 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-zinc-950/40 backdrop-blur-md flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
       ref={modalRef}
     >
-      <div className="bg-[#111113] border border-zinc-800 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white/95 backdrop-blur-xl border border-white/80 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/40">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200/80 bg-zinc-50/50">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 shrink-0">
-              <Key className="w-4 h-4 text-zinc-400" aria-hidden="true" />
+            <div className="w-9 h-9 rounded-xl bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-800 shrink-0 shadow-2xs">
+              <Key className="w-4 h-4 text-zinc-700" aria-hidden="true" />
             </div>
             <div>
-              <h2 id="auth-modal-title" className="font-semibold text-zinc-100 text-base">
+              <h2 id="auth-modal-title" className="font-bold text-zinc-950 text-base">
                 OpenRouter Model Gateway
               </h2>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-zinc-600">
                 Automatic Multi-Model Fallbacks (Claude, Gemini, Llama)
               </p>
             </div>
@@ -67,7 +67,7 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
           <button
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            className="p-1.5 rounded-xl hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
           >
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
@@ -75,40 +75,40 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
 
         <div className="p-6 space-y-6">
           {/* Method A: 1-Click Sign in with OpenRouter via PKCE */}
-          <div className="p-4 rounded-lg border border-zinc-800 bg-zinc-950 space-y-3">
+          <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50 space-y-3 shadow-2xs">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-zinc-300 text-xs font-medium uppercase tracking-wider">
-                <ShieldCheck className="w-4 h-4 text-zinc-400" aria-hidden="true" />
+              <div className="flex items-center gap-2 text-zinc-950 text-xs font-semibold uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4 text-zinc-700" aria-hidden="true" />
                 <span>Recommended: 1-Click PKCE Auth</span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white text-zinc-800 border border-zinc-200 font-semibold shadow-2xs">
                 Zero Copy-Paste
               </span>
             </div>
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <p className="text-xs text-zinc-600 leading-relaxed">
               Securely authorize AgentWire with your OpenRouter account using standard OAuth PKCE. Revoke anytime in your OpenRouter settings.
             </p>
             <button
               onClick={handleStartOAuth}
               disabled={isRedirecting}
               aria-busy={isRedirecting}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-zinc-100 hover:bg-white active:bg-zinc-200 disabled:opacity-40 text-zinc-950 text-xs font-medium transition-colors border border-transparent shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-zinc-950 hover:bg-black active:bg-zinc-850 disabled:opacity-40 text-white text-xs font-medium transition-all shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 active:scale-[0.99]"
             >
               <span>{isRedirecting ? 'Redirecting to OpenRouter...' : 'Sign In with OpenRouter'}</span>
-              <ExternalLink className="w-3.5 h-3.5 opacity-70" aria-hidden="true" />
+              <ExternalLink className="w-3.5 h-3.5 opacity-80" aria-hidden="true" />
             </button>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-zinc-800" />
-            <span className="text-[11px] font-mono text-zinc-500 uppercase">Or Enter Key Manually</span>
-            <div className="flex-1 h-px bg-zinc-800" />
+            <div className="flex-1 h-px bg-zinc-200" />
+            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Or Enter Key Manually</span>
+            <div className="flex-1 h-px bg-zinc-200" />
           </div>
 
           {/* Method B: Manual Key Input */}
           <form onSubmit={handleSaveManual} className="space-y-4">
             <div>
-              <label htmlFor="openrouter-api-key-input" className="block text-xs font-mono text-zinc-400 mb-1.5">
+              <label htmlFor="openrouter-api-key-input" className="block text-xs font-mono text-zinc-700 font-medium mb-1.5">
                 OpenRouter API Key (<code className="text-zinc-500">sk-or-v1-...</code>)
               </label>
               <input
@@ -117,9 +117,9 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
                 value={manualKey}
                 onChange={e => setManualKey(e.target.value)}
                 placeholder="sk-or-v1-xxxxxxxxxxxxxxxx"
-                className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600 focus-visible:ring-1 focus-visible:ring-zinc-400 font-mono"
+                className="w-full rounded-xl bg-white border border-zinc-300 px-3.5 py-2.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-500 focus-visible:ring-2 focus-visible:ring-zinc-200 font-mono shadow-2xs"
               />
-              <p className="text-[11px] text-zinc-500 mt-1">
+              <p className="text-[11px] text-zinc-500 mt-1.5">
                 Keys remain solely in your browser's local storage and are passed directly to OpenRouter.
               </p>
             </div>
@@ -129,7 +129,7 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="text-xs text-red-400 hover:text-red-300 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded px-1"
+                  className="text-xs text-rose-600 hover:text-rose-700 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 rounded px-1 transition-colors"
                 >
                   Disconnect Key
                 </button>
@@ -138,13 +138,13 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-3.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs border border-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 text-xs border border-zinc-200 font-medium transition-colors shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-medium transition-colors border border-transparent shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="px-5 py-2 rounded-xl bg-zinc-950 hover:bg-black text-white text-xs font-medium transition-all shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 active:scale-[0.98]"
                 >
                   Save Key
                 </button>

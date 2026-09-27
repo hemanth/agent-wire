@@ -5,35 +5,30 @@ export const ProblemSolutionSection: React.FC = () => {
   const problemSolutions = [
     {
       title: 'Remote MCP Discovery',
-      accent: '#A9DEF9',
       icon: Wrench,
       problem: 'Tool servers exist behind remote SSE or HTTP streams with complex handshake protocols.',
       solution: 'AgentWire connects to any MCP URL, dynamically probes tools via tools/list, and runs execution loops with zero boilerplate.'
     },
     {
       title: 'Provider Outage Immunity',
-      accent: '#E4C1F9',
       icon: Cpu,
       problem: 'Single-model agents fail completely when Claude or OpenAI is rate-limited or degraded.',
       solution: 'Configurable OpenRouter multi-model fallback chain automatically cascades to the next candidate model in real time.'
     },
     {
       title: 'Enforced Domain Standards',
-      accent: '#EDE7B1',
       icon: ShieldAlert,
       problem: 'Simple system prompts drift and lack procedural discipline for nuanced tasks like UI design or code audits.',
       solution: 'Attach versioned SKILL.md documents (e.g. Taste Skills, PR Review rules) directly into context on every execution.'
     },
     {
       title: 'Zero DevOps Serverless Edge',
-      accent: '#D3F8E2',
       icon: Server,
       problem: 'Hosting agents usually requires dedicated Docker containers, Redis queues, and continuous VM costs.',
       solution: 'Cloudflare Worker serverless edge deployment with instantaneous startup, global routing, and sub-100ms cold starts.'
     },
     {
       title: 'Universal cURL Consumption',
-      accent: '#F694C1',
       icon: Terminal,
       problem: 'Agents get trapped in walled-garden web interfaces rather than being callable from scripts and pipelines.',
       solution: 'Instant permanent POST REST endpoint curlable from GitHub Actions, terminal aliases, Python scripts, or webhooks.'
@@ -57,31 +52,15 @@ export const ProblemSolutionSection: React.FC = () => {
           return (
             <div
               key={idx}
-              className="rounded-xl border bg-white p-5 flex flex-col justify-between space-y-4 shadow-xs hover:shadow-md transition-all"
-              style={{
-                borderColor: `${item.accent}`
-              }}
+              className="rounded-2xl border border-zinc-200/90 bg-white p-5 flex flex-col justify-between space-y-4 shadow-2xs hover:border-zinc-300 hover:shadow-xs transition-all"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center border shadow-2xs"
-                    style={{
-                      backgroundColor: `${item.accent}`,
-                      borderColor: `${item.accent}`,
-                      color: '#09090b'
-                    }}
-                  >
-                    <Icon className="w-4 h-4 text-zinc-950" aria-hidden="true" />
+                  <div className="w-9 h-9 rounded-xl bg-zinc-100 border border-zinc-200/80 flex items-center justify-center text-zinc-800 shadow-2xs">
+                    <Icon className="w-4 h-4 text-zinc-700" aria-hidden="true" />
                   </div>
-                  <span
-                    className="text-[10px] font-mono px-2 py-0.5 rounded border font-semibold text-zinc-950"
-                    style={{
-                      backgroundColor: `${item.accent}50`,
-                      borderColor: `${item.accent}`
-                    }}
-                  >
-                    {item.accent}
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-500 font-semibold">
+                    0{idx + 1}
                   </span>
                 </div>
 
@@ -90,19 +69,13 @@ export const ProblemSolutionSection: React.FC = () => {
                 </h3>
 
                 <div className="space-y-2 text-xs">
-                  <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 text-zinc-600">
-                    <span className="font-bold text-zinc-500 font-mono text-[10px] block mb-0.5">THE PROBLEM</span>
-                    <p className="line-clamp-2 leading-relaxed">{item.problem}</p>
+                  <div className="p-3 rounded-xl bg-zinc-50/80 border border-zinc-150 text-zinc-600">
+                    <span className="font-bold text-zinc-400 font-mono text-[10px] block mb-1">THE PROBLEM</span>
+                    <p className="line-clamp-2 leading-relaxed text-zinc-600">{item.problem}</p>
                   </div>
-                  <div
-                    className="p-2.5 rounded-lg border text-zinc-950"
-                    style={{
-                      backgroundColor: `${item.accent}30`,
-                      borderColor: `${item.accent}`
-                    }}
-                  >
-                    <span className="font-bold font-mono text-[10px] block mb-0.5 text-zinc-800">AGENTWIRE FIX</span>
-                    <p className="line-clamp-3 font-medium leading-relaxed">{item.solution}</p>
+                  <div className="p-3 rounded-xl bg-white border border-zinc-300 text-zinc-950 shadow-2xs">
+                    <span className="font-bold font-mono text-[10px] block mb-1 text-zinc-950">AGENTWIRE FIX</span>
+                    <p className="line-clamp-3 font-medium leading-relaxed text-zinc-800">{item.solution}</p>
                   </div>
                 </div>
               </div>

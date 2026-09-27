@@ -4,9 +4,32 @@
 
 @layer base {
   body {
-    @apply bg-[#F8FAFC] text-zinc-900 antialiased;
+    @apply bg-[#FAFAFA] text-zinc-900 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+}
+
+/* ToneBird glass and card styling */
+.tonebird-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+}
+
+.tonebird-card {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(228, 231, 236, 0.8);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tonebird-card:hover {
+  border-color: rgba(203, 213, 225, 0.9);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.06);
 }
 
 /* Crisp technical scrollbar */
@@ -19,7 +42,7 @@
 }
 ::-webkit-scrollbar-thumb {
   background: #CBD5E1;
-  border-radius: 2px;
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
@@ -29,3 +52,66 @@
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: -0.02em;
 }
+
+/* Syntax Highlighting for Code Blocks (Dark Modern Editor Theme) */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #64748B;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: #94A3B8;
+}
+
+.token.property,
+.token.tag,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #38BDF8;
+}
+
+.token.boolean,
+.token.number {
+  color: #FBBF24;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #34D399;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.token.variable {
+  color: #E2E8F0;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #C084FC;
+}
+
+.token.function,
+.token.class-name {
+  color: #60A5FA;
+}
+
+.token.regex,
+.token.important {
+  color: #F472B6;
+}
+
+.token.parameter {
+  color: #FCD34D;
+}
+
