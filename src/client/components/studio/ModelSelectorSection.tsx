@@ -97,7 +97,7 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
                 </div>
                 <div className="text-[11px] text-zinc-500 font-mono mt-0.5 flex items-center gap-1.5">
                   <span>{m.provider} • {m.context}</span>
-                  {(m as any).supportsReasoning && (
+                  {m.reasoning && (
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-zinc-200/80 text-zinc-800 font-semibold">
                       CoT
                     </span>

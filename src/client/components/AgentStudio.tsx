@@ -48,9 +48,15 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const toggleModel = (modelId: string) => {
-    setSelectedModels(prev =>
-      prev.includes(modelId) ? (prev.length > 1 ? prev.filter(m => m !== modelId) : prev) : [...prev, modelId]
-    );
+    setSelectedModels(prev => {
+      if (!prev.includes(modelId)) {
+        return [...prev, modelId];
+      }
+      if (prev.length <= 1) {
+        return prev;
+      }
+      return prev.filter(m => m !== modelId);
+    });
   };
 
   const probeMcp = async (id: string, url: string) => {

@@ -229,7 +229,74 @@ export async function executeMcpTool(
   }
 }
 
-// Core Agent Execution Engine used by REST, SSE, MCP, A2A, OpenAI SDK, and Evals
+function estimateReasoningTokens(effort: 'none' | 'low' | 'medium' | 'high'): number {
+  if (effort === 'high') return 96;
+  if (effort === 'medium') return 48;
+  if (effort === 'low') return 24;
+  return 0;
+}
+
+function buildSandboxSimulationOutput(params: {
+  agent: Agent;
+  task: string;
+  effectiveReasoningEffort: 'none' | 'low' | 'medium' | 'high';
+  effectiveResponseFormat: 'text' | 'json_object' | 'json_schema';
+  enabledSkills: Array<{ id: string }>;
+  toolDescriptions: Array<{ name: string; description: string }>;
+  guardrailsTriggered: string[];
+  subAgentsCalled: string[];
+  session: { id: string; messages: Array<{ role: string; content: string }>; memory: Record<string, any> } | null;
+}): { finalResult: string; structuredOutput?: Record<string, unknown> } {
+  const {
+    agent,
+    task,
+    effectiveReasoningEffort,
+    effectiveResponseFormat,
+    enabledSkills,
+    toolDescriptions,
+    guardrailsTriggered,
+    subAgentsCalled,
+    session
+  } = params;
+
+  const guardrailNote =
+    guardrailsTriggered.length > 0 ? `\nGuardrail Shield Active: ${guardrailsTriggered.join(', ')}` : '';
+  const subAgentNote =
+    subAgentsCalled.length > 0 ? `\nA2A Sub-Agent Delegation: ${subAgentsCalled.join(', ')}` : '';
+
+  if (effectiveResponseFormat === 'json_object' || effectiveResponseFormat === 'json_schema') {
+    const jsonObj = {
+      agent: agent.slug,
+      agentName: agent.name,
+      status: 'completed',
+      reasoningEffort: effectiveReasoningEffort,
+      taskReceived: task,
+      skillsApplied: enabledSkills.map(s => s.id),
+      mcpToolsAvailable: toolDescriptions.map(t => t.name),
+      guardrailsTriggered,
+      subAgentsCalled,
+      memory: session?.memory || {}
+    };
+    return {
+      structuredOutput: jsonObj,
+      finalResult: JSON.stringify(jsonObj, null, 2)
+    };
+  }
+
+  if (session) {
+    const priorCount = session.messages.length;
+    const priorSummary = session.messages.map(m => `[${m.role}]: ${m.content}`).join(' | ');
+    const historyLine = priorSummary ? `Conversation History: ${priorSummary}\n` : '';
+    return {
+      finalResult: `[AgentWire Sandbox Simulation — Session: ${session.id}]\n\nExecution Summary: I am ${agent.name}.\nSystem persona, session history (${priorCount} prior messages), and working memory (${Object.keys(session.memory).length} keys) loaded.${guardrailNote}${subAgentNote}\n\nWorking Memory: ${JSON.stringify(session.memory)}\n${historyLine}Task received: "${task}".\n(Multi-turn context preserved across turns).`
+    };
+  }
+
+  const toolsSummary = toolDescriptions.map(t => `- ${t.name}: ${t.description}`).join('\n') || 'None';
+  return {
+    finalResult: `[AgentWire Sandbox Simulation — No OpenRouter Key provided]\n\nExecution Summary: I am ${agent.name}.\nSystem persona and ${enabledSkills.length} skills loaded successfully.${guardrailNote}${subAgentNote}\n\nConnected MCP tools:\n${toolsSummary}\n\nTask received: "${task}".\nTo enable full multi-model live generation, connect your key via "Sign in with OpenRouter" or supply -H "Authorization: Bearer <key>".`
+  };
+}
 export async function executeAgentCore(
   agent: Agent,
   payload: RunAgentRequest,
@@ -645,37 +712,27 @@ export async function executeAgentCore(
         }
       }
     }
-    const guardrailNote =
-      guardrailsTriggered.length > 0 ? `\nGuardrail Shield Active: ${guardrailsTriggered.join(', ')}` : '';
-    const subAgentNote =
-      subAgentsCalled.length > 0 ? `\nA2A Sub-Agent Delegation: ${subAgentsCalled.join(', ')}` : '';
 
-    if (effectiveResponseFormat === 'json_object' || effectiveResponseFormat === 'json_schema') {
-      const jsonObj = {
-        agent: agent.slug,
-        agentName: agent.name,
-        status: 'completed',
-        reasoningEffort: effectiveReasoningEffort,
-        taskReceived: task,
-        skillsApplied: enabledSkills.map(s => s.id),
-        mcpToolsAvailable: openRouterTools.map(t => t.function.name),
-        guardrailsTriggered,
-        subAgentsCalled,
-        memory: session?.memory || {}
-      };
-      structuredOutput = jsonObj;
-      finalResult = JSON.stringify(jsonObj, null, 2);
-    } else if (session) {
-      const priorCount = session.messages.length;
-      const priorSummary = session.messages.map(m => `[${m.role}]: ${m.content}`).join(' | ');
-      finalResult = `[AgentWire Sandbox Simulation — Session: ${session.id}]\n\nExecution Summary: I am ${agent.name}.\nSystem persona, session history (${priorCount} prior messages), and working memory (${Object.keys(session.memory).length} keys) loaded.${guardrailNote}${subAgentNote}\n\nWorking Memory: ${JSON.stringify(session.memory)}\n${priorSummary ? `Conversation History: ${priorSummary}\n` : ''}Task received: "${task}".\n(Multi-turn context preserved across turns).`;
-    } else {
-      finalResult = `[AgentWire Sandbox Simulation — No OpenRouter Key provided]\n\nExecution Summary: I am ${agent.name}.\nSystem persona and ${enabledSkills.length} skills loaded successfully.${guardrailNote}${subAgentNote}\n\nConnected MCP tools:\n${openRouterTools.map(t => `- ${t.function.name}: ${t.function.description}`).join('\n') || 'None'}\n\nTask received: "${task}".\nTo enable full multi-model live generation, connect your key via "Sign in with OpenRouter" or supply -H "Authorization: Bearer <key>".`;
-    }
+    const sandboxSim = buildSandboxSimulationOutput({
+      agent,
+      task,
+      effectiveReasoningEffort,
+      effectiveResponseFormat,
+      enabledSkills,
+      toolDescriptions: openRouterTools.map(t => ({
+        name: t.function.name,
+        description: t.function.description
+      })),
+      guardrailsTriggered,
+      subAgentsCalled,
+      session
+    });
+    finalResult = sandboxSim.finalResult;
+    structuredOutput = sandboxSim.structuredOutput;
 
     const estPrompt = Math.max(48, Math.ceil((fullSystemPrompt.length + task.length) / 4));
     const estCompletion = Math.max(32, Math.ceil(finalResult.length / 4));
-    const estReasoning = effectiveReasoningEffort === 'high' ? 96 : effectiveReasoningEffort === 'medium' ? 48 : 0;
+    const estReasoning = estimateReasoningTokens(effectiveReasoningEffort);
     tokensUsage = {
       prompt: estPrompt,
       completion: estCompletion,

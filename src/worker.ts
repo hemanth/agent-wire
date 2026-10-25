@@ -49,6 +49,36 @@ import {
 
 export type { Env };
 
+function jsonResponse(
+  data: unknown,
+  corsHeaders: Record<string, string>,
+  status = 200,
+  pretty = false
+): Response {
+  return new Response(pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
+  });
+}
+
+function jsonRpcSuccess(
+  id: string | number | null,
+  result: unknown,
+  corsHeaders: Record<string, string>
+): Response {
+  return jsonResponse({ jsonrpc: '2.0', id, result }, corsHeaders, 200);
+}
+
+function jsonRpcError(
+  id: string | number | null,
+  code: number,
+  message: string,
+  corsHeaders: Record<string, string>,
+  status = 400
+): Response {
+  return jsonResponse({ jsonrpc: '2.0', id, error: { code, message } }, corsHeaders, status);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -114,30 +144,22 @@ export default {
     }
 
     if (path === '/openapi.json' && request.method === 'GET') {
-      return new Response(JSON.stringify(buildOpenApiSpec(origin), null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(buildOpenApiSpec(origin), corsHeaders, 200, true);
     }
 
     if (path === '/.well-known/mcp/server-card.json' && request.method === 'GET') {
       const agents = await listAgents(env);
-      return new Response(JSON.stringify(buildMcpServerCard(origin, agents), null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(buildMcpServerCard(origin, agents), corsHeaders, 200, true);
     }
 
     if (path === '/.well-known/agent-card.json' && request.method === 'GET') {
       const agents = await listAgents(env);
-      return new Response(JSON.stringify(buildA2AAgentCard(origin, agents), null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(buildA2AAgentCard(origin, agents), corsHeaders, 200, true);
     }
 
     if (path === '/.well-known/agent-skills/index.json' && request.method === 'GET') {
       const index = await buildAgentSkillsIndex(origin);
-      return new Response(JSON.stringify(index, null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(index, corsHeaders, 200, true);
     }
 
     const skillDocMatch = path.match(/^\/\.well-known\/agent-skills\/([a-zA-Z0-9_-]+)\/SKILL\.md$/);
@@ -159,21 +181,15 @@ export default {
 
     if (path === '/.well-known/ai-catalog.json' && request.method === 'GET') {
       const agents = await listAgents(env);
-      return new Response(JSON.stringify(buildAiCatalog(origin, agents), null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(buildAiCatalog(origin, agents), corsHeaders, 200, true);
     }
 
     if (path === '/.well-known/oauth-protected-resource' && request.method === 'GET') {
-      return new Response(JSON.stringify(buildOAuthProtectedResource(origin), null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(buildOAuthProtectedResource(origin), corsHeaders, 200, true);
     }
 
     if (path === '/.well-known/http-message-signatures-directory' && request.method === 'GET') {
-      return new Response(JSON.stringify(WEB_BOT_AUTH_JWKS, null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(WEB_BOT_AUTH_JWKS, corsHeaders, 200, true);
     }
 
     // =========================================================================
@@ -182,9 +198,7 @@ export default {
     if (path === '/mcp' || path === '/api/mcp') {
       if (request.method === 'GET') {
         const agents = await listAgents(env);
-        return new Response(JSON.stringify(buildMcpServerCard(origin, agents), null, 2), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-        });
+        return jsonResponse(buildMcpServerCard(origin, agents), corsHeaders, 200, true);
       }
 
       if (request.method === 'POST') {
@@ -196,28 +210,23 @@ export default {
           const agents = await listAgents(env);
 
           if (method === 'initialize') {
-            return new Response(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                id,
-                result: {
-                  protocolVersion: '2025-03-26',
-                  serverInfo: { name: 'agent-wire-mcp', version: '2.0.0' },
-                  capabilities: {
-                    tools: { listChanged: true },
-                    resources: { listChanged: true },
-                    prompts: { listChanged: true }
-                  }
+            return jsonRpcSuccess(
+              id,
+              {
+                protocolVersion: '2025-03-26',
+                serverInfo: { name: 'agent-wire-mcp', version: '2.0.0' },
+                capabilities: {
+                  tools: { listChanged: true },
+                  resources: { listChanged: true },
+                  prompts: { listChanged: true }
                 }
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              },
+              corsHeaders
             );
           }
 
           if (method === 'notifications/initialized' || method === 'ping') {
-            return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: {} }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
+            return jsonRpcSuccess(id, {}, corsHeaders);
           }
 
           if (method === 'tools/list') {
@@ -265,9 +274,7 @@ export default {
                 }
               }))
             ];
-            return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: { tools } }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
+            return jsonRpcSuccess(id, { tools }, corsHeaders);
           }
 
           if (method === 'tools/call') {
@@ -275,42 +282,27 @@ export default {
             const toolArgs: any = params.arguments || {};
 
             if (toolName === 'list_agents') {
-              return new Response(
-                JSON.stringify({
-                  jsonrpc: '2.0',
-                  id,
-                  result: {
-                    content: [{ type: 'text', text: JSON.stringify(agents, null, 2) }]
-                  }
-                }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              return jsonRpcSuccess(
+                id,
+                { content: [{ type: 'text', text: JSON.stringify(agents, null, 2) }] },
+                corsHeaders
               );
             }
 
             if (toolName === 'eval_agent') {
               const target = await getAgent(toolArgs.agentId || 'agt_design_critic', env);
               if (!target) {
-                return new Response(
-                  JSON.stringify({
-                    jsonrpc: '2.0',
-                    id,
-                    error: { code: -32602, message: `Agent not found: ${toolArgs.agentId}` }
-                  }),
-                  { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-                );
+                return jsonRpcError(id, -32602, `Agent not found: ${toolArgs.agentId}`, corsHeaders, 404);
               }
               const summary = await runAgentEvaluationSuite(target, toolArgs.cases, request, env, corsHeaders);
-              return new Response(
-                JSON.stringify({
-                  jsonrpc: '2.0',
-                  id,
-                  result: {
-                    content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
-                    structuredContent: summary,
-                    isError: summary.failed > 0
-                  }
-                }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              return jsonRpcSuccess(
+                id,
+                {
+                  content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
+                  structuredContent: summary,
+                  isError: summary.failed > 0
+                },
+                corsHeaders
               );
             }
 
@@ -325,14 +317,7 @@ export default {
 
             const targetAgent = await getAgent(targetAgentId || 'agt_design_critic', env);
             if (!targetAgent) {
-              return new Response(
-                JSON.stringify({
-                  jsonrpc: '2.0',
-                  id,
-                  error: { code: -32602, message: `Agent not found for tool ${toolName}` }
-                }),
-                { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-              );
+              return jsonRpcError(id, -32602, `Agent not found for tool ${toolName}`, corsHeaders, 404);
             }
 
             const exec = await executeAgentCore(
@@ -348,23 +333,20 @@ export default {
             );
 
             const execBody = exec.body as RunAgentResponse;
-            return new Response(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                id,
-                result: {
-                  content: [{ type: 'text', text: execBody.result || JSON.stringify(exec.body) }],
-                  structuredContent: exec.body,
-                  isError: exec.status >= 400,
-                  _meta: {
-                    runId: execBody.runId,
-                    traceId: execBody.traceId,
-                    modelUsed: execBody.modelUsed,
-                    durationMs: execBody.durationMs
-                  }
+            return jsonRpcSuccess(
+              id,
+              {
+                content: [{ type: 'text', text: execBody.result || JSON.stringify(exec.body) }],
+                structuredContent: exec.body,
+                isError: exec.status >= 400,
+                _meta: {
+                  runId: execBody.runId,
+                  traceId: execBody.traceId,
+                  modelUsed: execBody.modelUsed,
+                  durationMs: execBody.durationMs
                 }
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              },
+              corsHeaders
             );
           }
 
@@ -383,9 +365,7 @@ export default {
                 mimeType: 'text/markdown'
               }))
             ];
-            return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: { resources } }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
+            return jsonRpcSuccess(id, { resources }, corsHeaders);
           }
 
           if (method === 'resources/read') {
@@ -393,37 +373,24 @@ export default {
             if (uri.startsWith('agent://')) {
               const ag = await getAgent(uri.slice('agent://'.length), env);
               if (ag) {
-                return new Response(
-                  JSON.stringify({
-                    jsonrpc: '2.0',
-                    id,
-                    result: {
-                      contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(ag, null, 2) }]
-                    }
-                  }),
-                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                return jsonRpcSuccess(
+                  id,
+                  { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(ag, null, 2) }] },
+                  corsHeaders
                 );
               }
             }
             if (uri.startsWith('skill://')) {
               const skillMd = getSkillMarkdownById(uri.slice('skill://'.length));
               if (skillMd) {
-                return new Response(
-                  JSON.stringify({
-                    jsonrpc: '2.0',
-                    id,
-                    result: {
-                      contents: [{ uri, mimeType: 'text/markdown', text: skillMd }]
-                    }
-                  }),
-                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                return jsonRpcSuccess(
+                  id,
+                  { contents: [{ uri, mimeType: 'text/markdown', text: skillMd }] },
+                  corsHeaders
                 );
               }
             }
-            return new Response(
-              JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32002, message: `Resource not found: ${uri}` } }),
-              { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+            return jsonRpcError(id, -32002, `Resource not found: ${uri}`, corsHeaders, 404);
           }
 
           if (method === 'prompts/list') {
@@ -432,43 +399,29 @@ export default {
               description: a.tagline,
               arguments: [{ name: 'task', description: 'Task to execute', required: true }]
             }));
-            return new Response(JSON.stringify({ jsonrpc: '2.0', id, result: { prompts } }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
+            return jsonRpcSuccess(id, { prompts }, corsHeaders);
           }
 
           if (method === 'prompts/get') {
             const ag = await getAgent(params.name || 'agt_design_critic', env);
             if (!ag) {
-              return new Response(
-                JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32602, message: 'Prompt not found' } }),
-                { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-              );
+              return jsonRpcError(id, -32602, 'Prompt not found', corsHeaders, 404);
             }
-            return new Response(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                id,
-                result: {
-                  description: ag.tagline,
-                  messages: [
-                    { role: 'user', content: { type: 'text', text: `${ag.systemPrompt}\n\nTask: ${params.arguments?.task || ''}` } }
-                  ]
-                }
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            return jsonRpcSuccess(
+              id,
+              {
+                description: ag.tagline,
+                messages: [
+                  { role: 'user', content: { type: 'text', text: `${ag.systemPrompt}\n\nTask: ${params.arguments?.task || ''}` } }
+                ]
+              },
+              corsHeaders
             );
           }
 
-          return new Response(
-            JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: `Unsupported MCP method: ${method}` } }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return jsonRpcError(id, -32601, `Unsupported MCP method: ${method}`, corsHeaders, 400);
         } catch (err: any) {
-          return new Response(
-            JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: err.message } }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return jsonRpcError(null, -32700, err.message, corsHeaders, 400);
         }
       }
     }
@@ -480,15 +433,10 @@ export default {
     if (agentCardMatch && request.method === 'GET') {
       const ag = await getAgent(agentCardMatch[1], env);
       if (!ag) {
-        return new Response(JSON.stringify({ error: 'Agent not found' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ error: 'Agent not found' }, corsHeaders, 404);
       }
       const agents = await listAgents(env);
-      return new Response(JSON.stringify(buildA2AAgentCard(origin, agents, ag), null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' }
-      });
+      return jsonResponse(buildA2AAgentCard(origin, agents, ag), corsHeaders, 200, true);
     }
 
     const agentA2AMatch = path.match(/^\/api\/agents\/([a-zA-Z0-9_-]+)\/a2a$/);
@@ -503,10 +451,7 @@ export default {
           const targetAgentId = agentA2AMatch?.[1] || params.agentId || 'agt_design_critic';
           const targetAgent = await getAgent(targetAgentId, env);
           if (!targetAgent) {
-            return new Response(
-              JSON.stringify({ jsonrpc: '2.0', id: rpcId, error: { code: -32602, message: `Agent not found: ${targetAgentId}` } }),
-              { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+            return jsonRpcError(rpcId, -32602, `Agent not found: ${targetAgentId}`, corsHeaders, 404);
           }
 
           const parts = params.message?.parts || [];
@@ -553,48 +498,29 @@ export default {
           };
 
           saveA2ATask(taskId, taskRecord);
-
-          return new Response(JSON.stringify({ jsonrpc: '2.0', id: rpcId, result: taskRecord }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
+          return jsonRpcSuccess(rpcId, taskRecord, corsHeaders);
         }
 
         if (method === 'tasks/get') {
           const taskRecord = getA2ATask(params.id);
           if (!taskRecord) {
-            return new Response(
-              JSON.stringify({ jsonrpc: '2.0', id: rpcId, error: { code: -32001, message: 'Task not found' } }),
-              { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+            return jsonRpcError(rpcId, -32001, 'Task not found', corsHeaders, 404);
           }
-          return new Response(JSON.stringify({ jsonrpc: '2.0', id: rpcId, result: taskRecord }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
+          return jsonRpcSuccess(rpcId, taskRecord, corsHeaders);
         }
 
         if (method === 'tasks/cancel') {
           const taskRecord = getA2ATask(params.id);
           if (!taskRecord) {
-            return new Response(
-              JSON.stringify({ jsonrpc: '2.0', id: rpcId, error: { code: -32001, message: 'Task not found' } }),
-              { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
+            return jsonRpcError(rpcId, -32001, 'Task not found', corsHeaders, 404);
           }
           taskRecord.status = { state: 'canceled', timestamp: new Date().toISOString() };
-          return new Response(JSON.stringify({ jsonrpc: '2.0', id: rpcId, result: taskRecord }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
+          return jsonRpcSuccess(rpcId, taskRecord, corsHeaders);
         }
 
-        return new Response(
-          JSON.stringify({ jsonrpc: '2.0', id: rpcId, error: { code: -32601, message: `Unsupported A2A method: ${method}` } }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return jsonRpcError(rpcId, -32601, `Unsupported A2A method: ${method}`, corsHeaders, 400);
       } catch (err: any) {
-        return new Response(
-          JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: err.message } }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return jsonRpcError(null, -32700, err.message, corsHeaders, 400);
       }
     }
 
@@ -621,9 +547,7 @@ export default {
           description: `${m.name} (${m.context})`
         }))
       ];
-      return new Response(JSON.stringify({ object: 'list', data }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return jsonResponse({ object: 'list', data }, corsHeaders);
     }
 
     if (path === '/v1/chat/completions' && request.method === 'POST') {
@@ -716,10 +640,7 @@ export default {
           headers: exec.headers
         });
       } catch (err: any) {
-        return new Response(JSON.stringify({ error: { message: err.message, type: 'invalid_request_error' } }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ error: { message: err.message, type: 'invalid_request_error' } }, corsHeaders, 400);
       }
     }
 
@@ -728,12 +649,12 @@ export default {
         const body: any = await request.json();
         const requestedModel = body.model || 'agt_design_critic';
         const targetAgent = (await getAgent(requestedModel, env)) || (await listAgents(env))[0];
-        const inputStr =
-          typeof body.input === 'string'
-            ? body.input
-            : Array.isArray(body.input)
-            ? body.input.map((i: any) => i.content || i.text || '').join('\n')
-            : 'Hello';
+        let inputStr = 'Hello';
+        if (typeof body.input === 'string') {
+          inputStr = body.input;
+        } else if (Array.isArray(body.input)) {
+          inputStr = body.input.map((i: any) => i.content || i.text || '').join('\n');
+        }
 
         const exec = await executeAgentCore(
           targetAgent,
@@ -787,19 +708,14 @@ export default {
           headers: exec.headers
         });
       } catch (err: any) {
-        return new Response(JSON.stringify({ error: { message: err.message } }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        return jsonResponse({ error: { message: err.message } }, corsHeaders, 400);
       }
     }
 
     // 1. List all agents
     if (path === '/api/agents' && request.method === 'GET') {
       const list = await listAgents(env);
-      return new Response(JSON.stringify(list), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      return jsonResponse(list, corsHeaders);
     }
 
     // 2. Create / Deploy an agent
@@ -837,52 +753,33 @@ export default {
         };
 
         await saveAgent(agent, env);
-
-        return new Response(JSON.stringify({ success: true, agent }), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ success: true, agent }, corsHeaders, 201);
       } catch (err: any) {
-        return new Response(JSON.stringify({ error: err.message }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: err.message }, corsHeaders, 400);
       }
     }
 
     // 2b. Run History Endpoint: GET /api/agents/:id/runs
     const runsMatch = path.match(/^\/api\/agents\/([a-zA-Z0-9_-]+)\/runs$/);
     if (runsMatch && request.method === 'GET') {
-      const id = runsMatch[1];
-      const agent = await getAgent(id, env);
+      const agent = await getAgent(runsMatch[1], env);
       if (!agent) {
-        return new Response(JSON.stringify({ error: 'Agent not found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: 'Agent not found' }, corsHeaders, 404);
       }
       const runs = await listAgentRuns(agent.id, 30, env);
-      return new Response(JSON.stringify({ runs }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      return jsonResponse({ runs }, corsHeaders);
     }
 
     // 2c. Sessions & Memory Management Endpoints
     const sessionsMatch = path.match(/^\/api\/agents\/([a-zA-Z0-9_-]+)\/sessions$/);
     if (sessionsMatch) {
-      const id = sessionsMatch[1];
-      const agent = await getAgent(id, env);
+      const agent = await getAgent(sessionsMatch[1], env);
       if (!agent) {
-        return new Response(JSON.stringify({ error: 'Agent not found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: 'Agent not found' }, corsHeaders, 404);
       }
       if (request.method === 'GET') {
         const sessions = await listSessions(agent.id, env);
-        return new Response(JSON.stringify({ sessions }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ sessions }, corsHeaders);
       }
       if (request.method === 'POST') {
         try {
@@ -898,15 +795,9 @@ export default {
             runsCount: 0
           };
           await saveSession(session, env);
-          return new Response(JSON.stringify({ success: true, session }), {
-            status: 201,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
+          return jsonResponse({ success: true, session }, corsHeaders, 201);
         } catch (err: any) {
-          return new Response(JSON.stringify({ error: err.message }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
+          return jsonResponse({ error: err.message }, corsHeaders, 400);
         }
       }
     }
@@ -919,29 +810,20 @@ export default {
       const session = await getSession(agentId, sessionId, env);
       if (request.method === 'GET') {
         if (!session) {
-          return new Response(JSON.stringify({ error: 'Session not found' }), {
-            status: 404,
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
+          return jsonResponse({ error: 'Session not found' }, corsHeaders, 404);
         }
-        return new Response(JSON.stringify(session), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse(session, corsHeaders);
       }
       if (request.method === 'DELETE') {
         await deleteSession(agentId, sessionId, env);
-        return new Response(JSON.stringify({ success: true }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ success: true }, corsHeaders);
       }
     }
 
     // 2d. API Key Management Endpoints
     if (path === '/api/keys' && request.method === 'GET') {
       const keys = await listApiKeys(env);
-      return new Response(JSON.stringify({ keys }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      return jsonResponse({ keys }, corsHeaders);
     }
 
     if (path === '/api/keys' && request.method === 'POST') {
@@ -949,41 +831,26 @@ export default {
         const body: any = await request.json().catch(() => ({}));
         const name = body.name || 'Personal API Key';
         const { key, record } = await createApiKey(name, env);
-        return new Response(JSON.stringify({ success: true, key, keyMeta: record }), {
-          status: 201,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ success: true, key, keyMeta: record }, corsHeaders, 201);
       } catch (err: any) {
-        return new Response(JSON.stringify({ error: err.message }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: err.message }, corsHeaders, 400);
       }
     }
 
     const keyMatch = path.match(/^\/api\/keys\/([a-zA-Z0-9_-]+)$/);
     if (keyMatch && request.method === 'DELETE') {
-      const keyId = keyMatch[1];
-      await revokeApiKey(keyId, env);
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      await revokeApiKey(keyMatch[1], env);
+      return jsonResponse({ success: true }, corsHeaders);
     }
 
     // 3. Get single agent
     const agentMatch = path.match(/^\/api\/agents\/([a-zA-Z0-9_-]+)$/);
     if (agentMatch && request.method === 'GET') {
-      const id = agentMatch[1];
-      const agent = await getAgent(id, env);
+      const agent = await getAgent(agentMatch[1], env);
       if (!agent) {
-        return new Response(JSON.stringify({ error: 'Agent not found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: 'Agent not found' }, corsHeaders, 404);
       }
-      return new Response(JSON.stringify(agent), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      return jsonResponse(agent, corsHeaders);
     }
 
     // 4. Delete agent (with protected agent guard)
@@ -991,15 +858,10 @@ export default {
       const id = agentMatch[1];
       const agent = await getAgent(id, env);
       if (agent?.isProtected) {
-        return new Response(JSON.stringify({ error: 'Starter agents are protected and cannot be deleted.' }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: 'Starter agents are protected and cannot be deleted.' }, corsHeaders, 403);
       }
       await deleteAgent(agent?.id || id, env);
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      return jsonResponse({ success: true }, corsHeaders);
     }
 
     // 5. Test/Probe an MCP server URL
@@ -1008,14 +870,9 @@ export default {
         const { url: mcpUrl, headers } = (await request.json()) as any;
         if (!mcpUrl) throw new Error('Missing url parameter');
         const tools = await probeMcpServer(mcpUrl, headers || {});
-        return new Response(JSON.stringify({ success: true, toolsCount: tools.length, tools }), {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ success: true, toolsCount: tools.length, tools }, corsHeaders);
       } catch (err: any) {
-        return new Response(JSON.stringify({ success: false, error: err.message }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ success: false, error: err.message }, corsHeaders, 400);
       }
     }
 
@@ -1033,15 +890,9 @@ export default {
           })
         });
         const data = await resp.json();
-        return new Response(JSON.stringify(data), {
-          status: resp.status,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse(data, corsHeaders, resp.status);
       } catch (err: any) {
-        return new Response(JSON.stringify({ error: err.message }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: err.message }, corsHeaders, 400);
       }
     }
 
@@ -1052,10 +903,7 @@ export default {
       const agent = await getAgent(id, env);
 
       if (!agent) {
-        return new Response(JSON.stringify({ error: `Agent "${id}" not found on this deployment.` }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: `Agent "${id}" not found on this deployment.` }, corsHeaders, 404);
       }
 
       let payload: RunAgentRequest;
@@ -1115,10 +963,7 @@ export default {
       const id = evalMatch[1];
       const agent = await getAgent(id, env);
       if (!agent) {
-        return new Response(JSON.stringify({ error: `Agent "${id}" not found.` }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
+        return jsonResponse({ error: `Agent "${id}" not found.` }, corsHeaders, 404);
       }
 
       let body: { cases?: AgentEvalCase[] } = {};
@@ -1127,16 +972,14 @@ export default {
       } catch {}
 
       const evalSummary = await runAgentEvaluationSuite(agent, body.cases, request, env, corsHeaders);
-
-      return new Response(JSON.stringify(evalSummary, null, 2), {
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      return jsonResponse(evalSummary, corsHeaders, 200, true);
     }
 
     // Default 404 for unmatched API routes
-    return new Response(JSON.stringify({ error: 'Endpoint not found. Use /api/agents, /api/agents/:id/run, /mcp, /api/a2a, or /v1/chat/completions' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders }
-    });
+    return jsonResponse(
+      { error: 'Endpoint not found. Use /api/agents, /api/agents/:id/run, /mcp, /api/a2a, or /v1/chat/completions' },
+      corsHeaders,
+      404
+    );
   }
 };
