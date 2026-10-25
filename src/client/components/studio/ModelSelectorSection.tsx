@@ -1,6 +1,7 @@
 import React from 'react';
-import { Layers, CheckCircle2, Key } from 'lucide-react';
+import { Layers, CheckCircle2, Key, ShieldCheck, Braces, Sparkles } from 'lucide-react';
 import { AVAILABLE_MODELS } from '../../../presets.ts';
+import { AgentGuardrails } from '../../../types.ts';
 
 interface ModelSelectorSectionProps {
   selectedModels: string[];
@@ -9,6 +10,12 @@ interface ModelSelectorSectionProps {
   onOpenAuthModal: () => void;
   maxTokens?: number;
   setMaxTokens?: (val: number) => void;
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high';
+  setReasoningEffort?: (val: 'none' | 'low' | 'medium' | 'high') => void;
+  responseFormat?: 'text' | 'json_object' | 'json_schema';
+  setResponseFormat?: (val: 'text' | 'json_object' | 'json_schema') => void;
+  guardrails?: AgentGuardrails;
+  setGuardrails?: (val: AgentGuardrails) => void;
 }
 
 export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
@@ -17,7 +24,13 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
   openRouterKey,
   onOpenAuthModal,
   maxTokens = 2048,
-  setMaxTokens
+  setMaxTokens,
+  reasoningEffort = 'medium',
+  setReasoningEffort,
+  responseFormat = 'text',
+  setResponseFormat,
+  guardrails = { blockPromptInjection: true, redactPii: true },
+  setGuardrails
 }) => {
   return (
     <section aria-labelledby="section-models-title" className="rounded-2xl border border-zinc-200/80 bg-white/90 backdrop-blur-sm p-6 sm:p-7 space-y-5 shadow-xs">
@@ -82,8 +95,13 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
-                  {m.provider} • {m.context}
+                <div className="text-[11px] text-zinc-500 font-mono mt-0.5 flex items-center gap-1.5">
+                  <span>{m.provider} • {m.context}</span>
+                  {(m as any).supportsReasoning && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-zinc-200/80 text-zinc-800 font-semibold">
+                      CoT
+                    </span>
+                  )}
                 </div>
               </div>
               <div
@@ -120,6 +138,94 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
               {limit} tokens
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Modern AI Stack Controls: Reasoning Effort, Structured Output & Runtime Guardrails */}
+      <div className="pt-4 border-t border-zinc-200/80 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        {/* Reasoning Effort */}
+        <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200/80 space-y-2">
+          <div className="flex items-center gap-1.5 font-semibold text-zinc-900">
+            <Sparkles className="w-3.5 h-3.5 text-zinc-700" aria-hidden="true" />
+            <span>Reasoning Effort</span>
+          </div>
+          <div className="flex flex-wrap gap-1 font-mono" role="group" aria-label="Reasoning effort">
+            {(['none', 'low', 'medium', 'high'] as const).map(level => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setReasoningEffort?.(level)}
+                className={`px-2.5 py-1 rounded-md border text-[11px] capitalize transition-all ${
+                  reasoningEffort === level
+                    ? 'border-zinc-950 bg-zinc-950 text-white font-semibold'
+                    : 'border-zinc-200 bg-white text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Structured Output Mode */}
+        <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200/80 space-y-2">
+          <div className="flex items-center gap-1.5 font-semibold text-zinc-900">
+            <Braces className="w-3.5 h-3.5 text-zinc-700" aria-hidden="true" />
+            <span>Output Contract</span>
+          </div>
+          <div className="flex flex-wrap gap-1 font-mono" role="group" aria-label="Output format">
+            {(
+              [
+                { id: 'text', label: 'Markdown / Text' },
+                { id: 'json_object', label: 'Strict JSON' }
+              ] as const
+            ).map(fmt => (
+              <button
+                key={fmt.id}
+                type="button"
+                onClick={() => setResponseFormat?.(fmt.id)}
+                className={`px-2.5 py-1 rounded-md border text-[11px] transition-all ${
+                  responseFormat === fmt.id
+                    ? 'border-zinc-950 bg-zinc-950 text-white font-semibold'
+                    : 'border-zinc-200 bg-white text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                {fmt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Runtime Guardrails */}
+        <div className="p-3 rounded-xl bg-zinc-50 border border-zinc-200/80 space-y-2">
+          <div className="flex items-center gap-1.5 font-semibold text-zinc-900">
+            <ShieldCheck className="w-3.5 h-3.5 text-zinc-700" aria-hidden="true" />
+            <span>Safety Guardrails</span>
+          </div>
+          <div className="flex flex-wrap gap-2 font-mono">
+            <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={guardrails.blockPromptInjection ?? true}
+                onChange={e =>
+                  setGuardrails?.({ ...guardrails, blockPromptInjection: e.target.checked })
+                }
+                className="rounded border-zinc-300 text-zinc-950 focus:ring-zinc-500"
+              />
+              <span>Injection Shield</span>
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-[11px] text-zinc-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={guardrails.redactPii ?? true}
+                onChange={e =>
+                  setGuardrails?.({ ...guardrails, redactPii: e.target.checked })
+                }
+                className="rounded border-zinc-300 text-zinc-950 focus:ring-zinc-500"
+              />
+              <span>PII Redaction</span>
+            </label>
+          </div>
         </div>
       </div>
     </section>

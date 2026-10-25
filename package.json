@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:server": "npx esbuild dev-server.mjs --bundle --platform=node --format=esm --outfile=dist-server/server.mjs",
     "preview": "vite preview",
     "server": "node dev-server.mjs",
     "test:e2e": "playwright test",

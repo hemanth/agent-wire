@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Agent, AttachedSkill, McpConnector } from '../../types.ts';
+import { Agent, AgentGuardrails, AttachedSkill, McpConnector } from '../../types.ts';
 import { BUILTIN_SKILLS, PRESET_MCPS } from '../../presets.ts';
 import { TemplateBar } from './studio/TemplateBar.tsx';
 import { IdentitySection } from './studio/IdentitySection.tsx';
@@ -27,11 +27,17 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
   );
 
   const [selectedModels, setSelectedModels] = useState<string[]>([
+    'anthropic/claude-sonnet-4',
     'anthropic/claude-3.5-sonnet',
-    'google/gemini-2.5-flash',
-    'meta-llama/llama-3.3-70b-instruct'
+    'google/gemini-2.5-pro'
   ]);
   const [maxTokens, setMaxTokens] = useState<number>(2048);
+  const [reasoningEffort, setReasoningEffort] = useState<'none' | 'low' | 'medium' | 'high'>('medium');
+  const [responseFormat, setResponseFormat] = useState<'text' | 'json_object' | 'json_schema'>('text');
+  const [guardrails, setGuardrails] = useState<AgentGuardrails>({
+    blockPromptInjection: true,
+    redactPii: true
+  });
 
   const [mcps, setMcps] = useState<McpConnector[]>([PRESET_MCPS[0]]);
   const [probingMcpId, setProbingMcpId] = useState<string | null>(null);
@@ -102,6 +108,9 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
         models: selectedModels,
         temperature: 0.3,
         maxTokens,
+        reasoningEffort,
+        responseFormat,
+        guardrails,
         mcps,
         skills,
         visibility,
@@ -167,6 +176,12 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
           onOpenAuthModal={onOpenAuthModal}
           maxTokens={maxTokens}
           setMaxTokens={setMaxTokens}
+          reasoningEffort={reasoningEffort}
+          setReasoningEffort={setReasoningEffort}
+          responseFormat={responseFormat}
+          setResponseFormat={setResponseFormat}
+          guardrails={guardrails}
+          setGuardrails={setGuardrails}
         />
 
         <McpConnectorsSection

@@ -8,12 +8,16 @@ export const DEFAULT_MODELS = [
 ];
 
 export const AVAILABLE_MODELS = [
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', context: '200k', speed: 'Fast' },
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google', context: '1M', speed: 'Ultra-fast' },
-  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google', context: '2M', speed: 'Moderate' },
-  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'OpenAI', context: '128k', speed: 'Fast' },
-  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', provider: 'Meta', context: '128k', speed: 'Very Fast' },
-  { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3', provider: 'DeepSeek', context: '64k', speed: 'Fast' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'Anthropic', context: '200k', speed: 'Reasoning', reasoning: true },
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', context: '200k', speed: 'Fast', reasoning: false },
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google', context: '2M', speed: 'Reasoning', reasoning: true },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google', context: '1M', speed: 'Ultra-fast', reasoning: false },
+  { id: 'openai/o3-mini', name: 'OpenAI o3-mini', provider: 'OpenAI', context: '200k', speed: 'Reasoning', reasoning: true },
+  { id: 'openai/gpt-4.1', name: 'GPT-4.1', provider: 'OpenAI', context: '1M', speed: 'Fast', reasoning: false },
+  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'OpenAI', context: '128k', speed: 'Fast', reasoning: false },
+  { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', provider: 'DeepSeek', context: '128k', speed: 'Reasoning', reasoning: true },
+  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', provider: 'Meta', context: '128k', speed: 'Very Fast', reasoning: false },
+  { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3', provider: 'DeepSeek', context: '64k', speed: 'Fast', reasoning: false },
 ];
 
 export const BUILTIN_SKILLS: AttachedSkill[] = [
@@ -23,7 +27,7 @@ export const BUILTIN_SKILLS: AttachedSkill[] = [
     description: 'High-craft frontend design guidelines, intentional contrast, and anti-AI-slop rules',
     enabled: true,
     content: `# Taste Skill (Craft & Aesthetics)
-- Verify contrast: Body text ≥4.5:1 against background.
+- Verify contrast: Body text >=4.5:1 against background.
 - Typography: Cap body line length at 65-75ch. Pair on a contrast axis.
 - Layout: No nested cards. Rely on generous spacing rhythm over box dividers.
 - Absolute bans: No gradient text, no decorative blur overkill, no 2023-era uppercase kicker above every section.
@@ -49,6 +53,17 @@ export const BUILTIN_SKILLS: AttachedSkill[] = [
 - Primitives over prescriptive wrappers.
 - Zero boilerplate: the most common path should be 3 lines of code.
 - Provide sensible defaults for all optional parameters.`
+  },
+  {
+    id: 'agent-ready-standard',
+    name: 'Agent-Ready Level 5 Protocol Standard',
+    description: 'Enforces RFC 9727 API Catalogs, MCP Server Cards, A2A Agent Cards, Web Bot Auth, and Markdown Content Negotiation',
+    enabled: true,
+    content: `# Agent-Ready Level 5 Standard
+- Broadcast RFC 9727 Link headers and content-signal: ai-train=yes, search=yes, ai-input=yes.
+- Serve clean Markdown with YAML frontmatter and x-markdown-tokens on Accept: text/markdown.
+- Expose SEP-1649 MCP Server Card (/.well-known/mcp/server-card.json) and A2A v1.0 Agent Card (/.well-known/agent-card.json).
+- Register browser tools via WebMCP (navigator.modelContext.registerTool).`
   }
 ];
 
@@ -91,8 +106,16 @@ When relevant, call the Stitch MCP tools to inspect or generate alternative desi
     models: ['anthropic/claude-3.5-sonnet', 'google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct'],
     temperature: 0.3,
     maxTokens: 2048,
+    reasoningEffort: 'medium',
+    responseFormat: 'text',
+    guardrails: {
+      blockPromptInjection: true,
+      redactPii: true,
+      maxToolSteps: 5
+    },
+    subAgents: ['agt_pr_triage'],
     mcps: [PRESET_MCPS[0]],
-    skills: [BUILTIN_SKILLS[0]],
+    skills: [BUILTIN_SKILLS[0], BUILTIN_SKILLS[3]],
     visibility: 'public',
     isProtected: true,
     createdAt: new Date().toISOString(),
@@ -110,6 +133,13 @@ When given an issue or PR task, you query the GitHub MCP tools to fetch the issu
     models: ['google/gemini-2.5-flash', 'anthropic/claude-3.5-sonnet'],
     temperature: 0.2,
     maxTokens: 2048,
+    reasoningEffort: 'medium',
+    responseFormat: 'text',
+    guardrails: {
+      blockPromptInjection: true,
+      redactPii: true,
+      maxToolSteps: 5
+    },
     mcps: [PRESET_MCPS[1]],
     skills: [BUILTIN_SKILLS[1]],
     visibility: 'public',

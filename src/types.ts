@@ -27,6 +27,12 @@ export interface AttachedSkill {
   enabled: boolean;
 }
 
+export interface AgentGuardrails {
+  blockPromptInjection?: boolean;
+  redactPii?: boolean;
+  maxToolSteps?: number;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -36,6 +42,11 @@ export interface Agent {
   models: string[]; // OpenRouter auto-fallback model list
   temperature: number;
   maxTokens?: number;
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high';
+  responseFormat?: 'text' | 'json_object' | 'json_schema';
+  outputSchema?: Record<string, any>;
+  guardrails?: AgentGuardrails;
+  subAgents?: string[];
   mcps: McpConnector[];
   skills: AttachedSkill[];
   openRouterKey?: string;
@@ -58,11 +69,14 @@ export interface RunAgentRequest {
   stream?: boolean;
   max_tokens?: number;
   maxTokens?: number;
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high';
+  responseFormat?: 'text' | 'json_object' | 'json_schema';
+  outputSchema?: Record<string, any>;
 }
 
 export interface ToolExecutionStep {
   step: number;
-  type: 'thought' | 'tool_call' | 'tool_result' | 'answer';
+  type: 'thought' | 'tool_call' | 'tool_result' | 'handoff' | 'guardrail' | 'answer';
   timestamp: string;
   durationMs?: number;
   mcpName?: string;
@@ -78,17 +92,23 @@ export interface RunAgentResponse {
   agentId: string;
   task: string;
   result: string;
+  structuredOutput?: any;
   status: 'success' | 'error';
   error?: string;
   modelUsed: string;
   modelsAttempted?: string[];
+  reasoningEffort?: string;
   toolsUsed: string[];
+  subAgentsCalled?: string[];
+  guardrailsTriggered?: string[];
   steps: ToolExecutionStep[];
   tokens?: {
     prompt: number;
     completion: number;
+    reasoning?: number;
     total: number;
   };
+  estimatedCostUsd?: number;
   durationMs: number;
   sessionId?: string;
   sessionMessagesCount?: number;
@@ -123,3 +143,36 @@ export interface AgentSession {
   runsCount: number;
 }
 
+export interface AgentEvalCase {
+  id: string;
+  name: string;
+  task: string;
+  expectedContains?: string[];
+  expectedNotContains?: string[];
+  expectJson?: boolean;
+  maxDurationMs?: number;
+}
+
+export interface AgentEvalCaseResult {
+  id: string;
+  name: string;
+  task: string;
+  passed: boolean;
+  durationMs: number;
+  runId: string;
+  outputPreview: string;
+  assertions: Array<{ label: string; passed: boolean; detail?: string }>;
+}
+
+export interface AgentEvalSuiteResponse {
+  evalId: string;
+  agentId: string;
+  agentName: string;
+  timestamp: string;
+  total: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+  durationMs: number;
+  results: AgentEvalCaseResult[];
+}

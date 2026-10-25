@@ -4,10 +4,62 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2318181b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m10 15 5-3-5-3v6Z'/></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AgentWire — Deploy any AI Agent as an instant URL, MCP Server, Google A2A v1.0 Peer, and OpenAI-compatible endpoint." />
+    <meta property="og:title" content="AgentWire — Your Agent as a URL" />
+    <meta property="og:description" content="Turn prompts, remote MCP connectors, and SKILL.md rules into curlable serverless agent endpoints." />
+    <meta property="og:image" content="https://h3manth.com/ai/agent-wire/agent-wire-social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <title>AgentWire — Your Agent as a URL</title>
+    <!-- Agent-Ready Level 5 Discovery Links (RFC 9727 / SEP-1649 / A2A v1.0) -->
+    <link rel="api-catalog" href=".well-known/api-catalog" type="application/linkset+json" />
+    <link rel="service-desc" href="openapi.json" type="application/openapi+json" />
+    <link rel="service-doc" href="llms.txt" type="text/markdown" />
+    <link rel="alternate" href="index.md" type="text/markdown" title="Markdown Twin" />
+    <link rel="mcp-server" href=".well-known/mcp/server-card.json" type="application/json" />
+    <link rel="agent-card" href=".well-known/agent-card.json" type="application/json" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      // Subpath-aware fetch router (supports both root / and /ai/agent-wire/) + WebMCP registration
+      (function initAgentWireRuntime() {
+        try {
+          var basePrefix = window.location.pathname.startsWith('/ai/agent-wire') ? '/ai/agent-wire' : '';
+          if (basePrefix && typeof window.fetch === 'function') {
+            var origFetch = window.fetch.bind(window);
+            window.fetch = function(input, init) {
+              if (typeof input === 'string' && /^\/(api\/|mcp\b|v1\/|\.well-known\/|openapi\.json|llms\.txt)/.test(input)) {
+                input = basePrefix + input;
+              }
+              return origFetch(input, init);
+            };
+          }
+          if (typeof navigator !== 'undefined' && navigator.modelContext && typeof navigator.modelContext.registerTool === 'function') {
+            navigator.modelContext.registerTool({
+              name: 'agentwire_run_agent',
+              description: 'Execute a deployed AgentWire agent by ID with a prompt and optional sessionId.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  agentId: { type: 'string', description: 'Agent ID, e.g. agt_design_critic' },
+                  input: { type: 'string', description: 'Prompt or task payload' },
+                  sessionId: { type: 'string', description: 'Optional stateful session ID' }
+                },
+                required: ['agentId', 'input']
+              },
+              async execute(args) {
+                var res = await window.fetch('/api/agents/' + encodeURIComponent(args.agentId) + '/run', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ input: args.input, sessionId: args.sessionId })
+                });
+                return await res.json();
+              }
+            });
+          }
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body class="bg-[#FAFAFA] text-zinc-900 font-sans antialiased min-h-screen selection:bg-zinc-200 selection:text-zinc-950">
     <div id="root"></div>
