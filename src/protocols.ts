@@ -175,7 +175,6 @@ export function buildMcpServerCard(origin: string, agents: Agent[]) {
 }
 
 export function buildA2AAgentCard(origin: string, agents: Agent[], targetAgent?: Agent) {
-  const primary = targetAgent || agents[0];
   return {
     $schema: 'https://a2a-protocol.org/schemas/agent-card/v1.0.0.json',
     schemaVersion: '1.0.0',

@@ -60,6 +60,7 @@ export interface Agent {
 }
 
 export interface RunAgentRequest {
+  input?: string;
   task?: string;
   prompt?: string;
   messages?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;

@@ -111,6 +111,32 @@ test.describe('Modern AI Stack: MCP, A2A v1.0, OpenAI v1, SSE, Guardrails, Evals
     const readBody = await readRes.json();
     const parsedAgent = JSON.parse(readBody.result.contents[0].text);
     expect(parsedAgent.id).toBe('agt_design_critic');
+
+    // 5. tools/call -> eval_agent
+    const evalToolRes = await request.post(`${BASE_URL}/mcp`, {
+      data: {
+        jsonrpc: '2.0',
+        id: 5,
+        method: 'tools/call',
+        params: {
+          name: 'eval_agent',
+          arguments: { agentId: 'agt_design_critic' }
+        }
+      }
+    });
+    const evalToolBody = await evalToolRes.json();
+    expect(evalToolBody.result.isError).toBe(false);
+    expect(evalToolBody.result.structuredContent.passRate).toBe(100);
+  });
+
+  test('2b. Security Hardening: SSRF protection on MCP probe', async ({ request }) => {
+    const ssrfRes = await request.post(`${BASE_URL}/api/mcp/probe`, {
+      data: { url: 'http://169.254.169.254/latest/meta-data/' }
+    });
+    expect(ssrfRes.status()).toBe(400);
+    const ssrfBody = await ssrfRes.json();
+    expect(ssrfBody.success).toBe(false);
+    expect(ssrfBody.error).toContain('SSRF guard blocked');
   });
 
   test('3. Google A2A v1.0 Protocol: tasks/send, tasks/get, and multi-agent subAgents delegation', async ({ request }) => {

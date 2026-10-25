@@ -112,9 +112,10 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 2. Serve static files from ./dist with universal Agent-Ready Link & Content-Signal headers
-    let filePath = path.join(DIST_DIR, pathname);
-    if (pathname === '/' || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    // 2. Serve static files from ./dist with universal Agent-Ready Link & Content-Signal headers (with path-traversal guard)
+    const normalizedRel = path.normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, '').replace(/^\/+/, '');
+    let filePath = path.resolve(DIST_DIR, normalizedRel);
+    if (!filePath.startsWith(DIST_DIR) || pathname === '/' || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
       filePath = path.join(DIST_DIR, 'index.html');
     }
 
