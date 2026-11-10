@@ -5,24 +5,37 @@
 
 const STORAGE_KEY = 'openrouter_key';
 const VERIFIER_KEY = 'openrouter_code_verifier';
+const STATE_KEY = 'openrouter_oauth_state';
 
 export function getStoredApiKey(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(STORAGE_KEY) || localStorage.getItem('openrouter_api_key');
+  try {
+    return localStorage.getItem(STORAGE_KEY) || localStorage.getItem('openrouter_api_key');
+  } catch {
+    return null;
+  }
 }
 
 export function setStoredApiKey(key: string): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, key);
-  localStorage.setItem('openrouter_api_key', key);
-  window.dispatchEvent(new CustomEvent('openrouter-auth-changed', { detail: { key } }));
+  try {
+    localStorage.setItem(STORAGE_KEY, key);
+    localStorage.removeItem('openrouter_api_key');
+  } catch {
+    // Ignore storage quota errors
+  }
+  window.dispatchEvent(new CustomEvent('openrouter-auth-changed', { detail: { connected: true } }));
 }
 
 export function clearStoredApiKey(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem('openrouter_api_key');
-  window.dispatchEvent(new CustomEvent('openrouter-auth-changed', { detail: { key: null } }));
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('openrouter_api_key');
+  } catch {
+    // Ignore storage errors
+  }
+  window.dispatchEvent(new CustomEvent('openrouter-auth-changed', { detail: { connected: false } }));
 }
 
 export function generateCodeVerifier(): string {
@@ -45,19 +58,22 @@ export async function computeS256Challenge(verifier: string): Promise<string> {
 }
 
 /**
- * Start the OpenRouter OAuth PKCE authorization flow.
+ * Start the OpenRouter OAuth PKCE authorization flow with CSRF state protection.
  */
 export async function initiateOAuth(callbackUrl?: string): Promise<void> {
   const verifier = generateCodeVerifier();
-  // Store in both sessionStorage and localStorage for resilience across cross-origin redirects/tabs
+  const oauthState = generateCodeVerifier().slice(0, 24);
   sessionStorage.setItem(VERIFIER_KEY, verifier);
   localStorage.setItem(VERIFIER_KEY, verifier);
+  sessionStorage.setItem(STATE_KEY, oauthState);
 
   const challenge = await computeS256Challenge(verifier);
-  const url = callbackUrl ?? window.location.origin + window.location.pathname;
+  const baseCallback = callbackUrl ?? window.location.origin + window.location.pathname;
+  const cbUrl = new URL(baseCallback, window.location.origin);
+  cbUrl.searchParams.set('state', oauthState);
 
   const params = new URLSearchParams({
-    callback_url: url,
+    callback_url: cbUrl.toString(),
     code_challenge: challenge,
     code_challenge_method: 'S256',
   });
@@ -69,7 +85,15 @@ export async function initiateOAuth(callbackUrl?: string): Promise<void> {
  * Exchange the OAuth code for an OpenRouter API key.
  * Tries direct OpenRouter exchange, with backend proxy fallback.
  */
-export async function exchangeOAuthCode(code: string): Promise<string> {
+export async function exchangeOAuthCode(code: string, returnedState?: string | null): Promise<string> {
+  const expectedState = sessionStorage.getItem(STATE_KEY);
+  sessionStorage.removeItem(STATE_KEY);
+  if (expectedState && returnedState !== expectedState) {
+    sessionStorage.removeItem(VERIFIER_KEY);
+    localStorage.removeItem(VERIFIER_KEY);
+    throw new Error('OAuth state mismatch (CSRF check failed). Please try signing in again.');
+  }
+
   const verifier =
     sessionStorage.getItem(VERIFIER_KEY) || localStorage.getItem(VERIFIER_KEY);
 
@@ -103,17 +127,14 @@ export async function exchangeOAuthCode(code: string): Promise<string> {
       }
     } else {
       const errText = await directRes.text();
-      let parsedErr: any = null;
       try {
-        parsedErr = JSON.parse(errText);
+        JSON.parse(errText);
       } catch {
-        // ignore
+        // Fallback to edge worker proxy below
       }
-      const message = parsedErr?.error?.message || parsedErr?.error || `Direct exchange returned ${directRes.status}: ${errText}`;
-      console.warn('Direct OpenRouter exchange failed, trying proxy:', message);
     }
-  } catch (directErr) {
-    console.warn('Direct OpenRouter fetch error, falling back to proxy:', directErr);
+  } catch {
+    // Fallback to edge worker proxy below
   }
 
   // 2. Fallback to edge worker proxy

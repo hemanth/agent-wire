@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
-import * as path from 'path';
 
 test.describe('Landing Page & Pastel Design System', () => {
-  test('Landing page loads with Coolors pastel architectural theme and full navigation', async ({ page }) => {
+  test('Landing page loads with Coolors pastel architectural theme and full navigation', async ({ page }, testInfo) => {
     // Navigate to root
     await page.goto('http://localhost:8787');
 
@@ -34,8 +33,7 @@ test.describe('Landing Page & Pastel Design System', () => {
     await expect(copyButton).toBeVisible();
 
     // 5. Capture screenshot of the full landing page for visual verification
-    const screenshotPath = '/Users/lika/.gemini/antigravity-cli/brain/4fd99f72-20af-4d22-b050-98f3a394b625/landing_page_ui.png';
-    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('landing_page_ui.png'), fullPage: true });
 
     // 6. Test Navigation to Studio via Hero CTA
     const deployHeroBtn = page.getByRole('button', { name: /Deploy Your First Agent/i }).first();

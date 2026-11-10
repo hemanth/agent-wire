@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Play, Loader2, Bot, CheckCircle2, XCircle, FlaskConical, Network } from 'lucide-react';
+import { X, Play, Loader2, Bot, CheckCircle2, XCircle, FlaskConical, Network, Lock } from 'lucide-react';
 import { Agent, AgentEvalSuiteResponse, RunAgentResponse } from '../../types.ts';
 import { CurlSnippet } from './CurlSnippet.tsx';
 import { TelemetryBar } from './runner/TelemetryBar.tsx';
@@ -7,6 +7,13 @@ import { ExecutionTrace } from './runner/ExecutionTrace.tsx';
 import { RunHistoryView } from './runner/RunHistoryView.tsx';
 import { SessionBar } from './runner/SessionBar.tsx';
 import { useModalA11y } from '../hooks/useModalA11y.ts';
+import { getStoredWireApiKey, setStoredWireApiKey } from '../lib/runtime-init.ts';
+
+function generateSessionId(): string {
+  const bytes = new Uint8Array(6);
+  crypto.getRandomValues(bytes);
+  return `ses_${Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')}`;
+}
 
 interface AgentRunnerModalProps {
   agent: Agent;
@@ -20,27 +27,34 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<RunAgentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wireApiKey, setWireApiKey] = useState<string>(() => getStoredWireApiKey() || '');
 
   // Stateful Session, Memory & Multi-turn History state
   const [sessionEnabled, setSessionEnabled] = useState(false);
-  const [sessionId, setSessionId] = useState(`ses_${Math.random().toString(36).substring(2, 8)}`);
+  const [sessionId, setSessionId] = useState(() => generateSessionId());
   const [memory, setMemory] = useState<Record<string, any>>({});
   const [messagesCount, setMessagesCount] = useState(0);
 
   // Built-in Eval Suite state
   const [evalRunning, setEvalRunning] = useState(false);
   const [evalReport, setEvalReport] = useState<AgentEvalSuiteResponse | null>(null);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
   const modalRef = useModalA11y<HTMLDivElement>({ isOpen: true, onClose });
 
   const handleResetSession = async () => {
     if (sessionId) {
-      await fetch(`/api/agents/${agent.id}/sessions/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+      const headers: Record<string, string> = {};
+      if (wireApiKey.trim()) headers['X-AgentWire-Key'] = wireApiKey.trim();
+      await fetch(`/api/agents/${agent.id}/sessions/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+        headers
+      }).catch(() => {});
     }
     setMessagesCount(0);
     setMemory({});
     setResponse(null);
-    setSessionId(`ses_${Math.random().toString(36).substring(2, 8)}`);
+    setSessionId(generateSessionId());
   };
 
   const handleRun = async () => {
@@ -50,7 +64,8 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
 
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (openRouterKey) headers['Authorization'] = `Bearer ${openRouterKey}`;
+      if (openRouterKey) headers['X-OpenRouter-Key'] = openRouterKey;
+      if (wireApiKey.trim()) headers['X-AgentWire-Key'] = wireApiKey.trim();
       const payload: any = { task };
       if (sessionEnabled) {
         payload.sessionId = sessionId;
@@ -76,16 +91,23 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
   const handleRunEvalSuite = async () => {
     if (evalRunning) return;
     setEvalRunning(true);
+    setEvalError(null);
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (wireApiKey.trim()) headers['X-AgentWire-Key'] = wireApiKey.trim();
       const res = await fetch(`/api/agents/${agent.id}/eval`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({})
       });
-      if (res.ok) {
-        const report: AgentEvalSuiteResponse = await res.json();
-        setEvalReport(report);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Eval failed (HTTP ${res.status})`);
       }
+      const report: AgentEvalSuiteResponse = await res.json();
+      setEvalReport(report);
+    } catch (err: any) {
+      setEvalError(err.message || 'Evaluation suite failed');
     } finally {
       setEvalRunning(false);
     }
@@ -110,12 +132,12 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center bg-zinc-200/80 p-0.5 rounded-lg text-xs font-mono">
-              <button type="button" onClick={() => setActiveTab('runner')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'runner' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-600 hover:text-zinc-900'}`}>Sandbox</button>
-              <button type="button" onClick={() => setActiveTab('history')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'history' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-600 hover:text-zinc-900'}`}>History & Traces</button>
-              <button type="button" onClick={() => setActiveTab('evals')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'evals' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-600 hover:text-zinc-900'}`}>Evals & Protocols</button>
+            <div className="flex items-center bg-zinc-200/80 p-0.5 rounded-lg text-xs font-mono" role="group" aria-label="Agent runner views">
+              <button type="button" aria-pressed={activeTab === 'runner'} onClick={() => setActiveTab('runner')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'runner' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-700 hover:text-zinc-950'}`}>Sandbox</button>
+              <button type="button" aria-pressed={activeTab === 'history'} onClick={() => setActiveTab('history')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'history' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-700 hover:text-zinc-950'}`}>History & Traces</button>
+              <button type="button" aria-pressed={activeTab === 'evals'} onClick={() => setActiveTab('evals')} className={`px-3 py-1 rounded-md transition-all ${activeTab === 'evals' ? 'bg-white text-zinc-950 shadow-2xs font-semibold' : 'text-zinc-700 hover:text-zinc-950'}`}>Evals & Protocols</button>
             </div>
-            <button onClick={onClose} aria-label="Close runner modal" className="p-1.5 rounded-lg hover:bg-black/5 text-zinc-500 hover:text-zinc-950 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400">
+            <button onClick={onClose} aria-label="Close runner modal" className="p-1.5 rounded-lg hover:bg-black/5 text-zinc-600 hover:text-zinc-950 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400">
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
@@ -123,8 +145,28 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
+          {agent.visibility === 'private' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 text-xs font-mono">
+              <div className="flex items-center gap-2 text-amber-950 font-semibold shrink-0">
+                <Lock className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
+                <label htmlFor="runner-wire-key-input">Private Agent Key:</label>
+              </div>
+              <input
+                id="runner-wire-key-input"
+                type="password"
+                value={wireApiKey}
+                onChange={e => {
+                  setWireApiKey(e.target.value);
+                  setStoredWireApiKey(e.target.value);
+                }}
+                placeholder="wire_live_... (mint one via API Keys)"
+                className="flex-1 rounded-lg bg-white border border-amber-300 px-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          )}
+
           {activeTab === 'history' ? (
-            <RunHistoryView agentId={agent.id} />
+            <RunHistoryView agentId={agent.id} wireApiKey={wireApiKey.trim() || null} />
           ) : activeTab === 'evals' ? (
             <div className="space-y-6" aria-label="Agent Evals and Protocol Endpoints">
               {/* Deterministic Eval Suite Runner */}
@@ -158,6 +200,12 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
                     )}
                   </button>
                 </div>
+
+                {evalError && (
+                  <div role="alert" className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs font-mono">
+                    {evalError}
+                  </div>
+                )}
 
                 {evalReport && (
                   <div className="space-y-3 pt-2 border-t border-zinc-200">
@@ -208,23 +256,23 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
                   <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 space-y-1">
                     <div className="font-bold text-zinc-900">Native REST & SSE Stream</div>
-                    <div className="text-zinc-600 break-all">POST /api/agents/{agent.id}/run</div>
-                    <div className="text-[11px] text-zinc-500">Supports {`{"stream": true}`} &amp; {`{"responseFormat": "json_object"}`}</div>
+                    <div className="text-zinc-700 break-all">POST /api/agents/{agent.id}/run</div>
+                    <div className="text-[11px] text-zinc-600">Supports {`{"stream": true}`} &amp; {`{"responseFormat": "json_object"}`}</div>
                   </div>
                   <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 space-y-1">
                     <div className="font-bold text-zinc-900">MCP JSON-RPC 2.0 Tool</div>
-                    <div className="text-zinc-600 break-all">POST /mcp → tool: agent_{agent.slug.replace(/[^a-z0-9_]/gi, '_')}</div>
-                    <div className="text-[11px] text-zinc-500">Resource URI: agent://{agent.id}</div>
+                    <div className="text-zinc-700 break-all">POST /mcp → tool: agent_{agent.slug.replace(/[^a-z0-9_]/gi, '_')}</div>
+                    <div className="text-[11px] text-zinc-600">Resource URI: agent://{agent.id}</div>
                   </div>
                   <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 space-y-1">
                     <div className="font-bold text-zinc-900">Google A2A v1.0 Peer</div>
-                    <div className="text-zinc-600 break-all">GET /api/agents/{agent.id}/agent-card.json</div>
-                    <div className="text-[11px] text-zinc-500">JSON-RPC tasks/send at POST /api/a2a</div>
+                    <div className="text-zinc-700 break-all">GET /api/agents/{agent.id}/agent-card.json</div>
+                    <div className="text-[11px] text-zinc-600">JSON-RPC tasks/send at POST /api/a2a</div>
                   </div>
                   <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 space-y-1">
                     <div className="font-bold text-zinc-900">OpenAI v1 Drop-In SDK</div>
-                    <div className="text-zinc-600 break-all">POST /v1/chat/completions • POST /v1/responses</div>
-                    <div className="text-[11px] text-zinc-500">model: &quot;agentwire/{agent.slug}&quot;</div>
+                    <div className="text-zinc-700 break-all">POST /v1/chat/completions • POST /v1/responses</div>
+                    <div className="text-[11px] text-zinc-600">model: &quot;agentwire/{agent.slug}&quot;</div>
                   </div>
                 </div>
               </section>
@@ -245,15 +293,15 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
 
               {/* Direct cURL / Code Command */}
               <section aria-labelledby="curl-label">
-                <h3 id="curl-label" className="text-xs font-mono text-zinc-500 mb-2 uppercase tracking-wider font-semibold">1. Direct cURL Command</h3>
+                <h3 id="curl-label" className="text-xs font-mono text-zinc-600 mb-2 uppercase tracking-wider font-semibold">1. Direct cURL Command</h3>
                 <CurlSnippet agentId={agent.id} agentName={agent.name} task={task} sessionId={sessionEnabled ? sessionId : undefined} memory={sessionEnabled ? memory : undefined} />
               </section>
 
               {/* In-Browser Sandbox */}
               <section aria-labelledby="sandbox-label">
                 <div className="flex items-center justify-between mb-2">
-                  <label htmlFor="task-prompt-input" id="sandbox-label" className="block text-xs font-mono text-zinc-500 uppercase tracking-wider font-semibold">2. Test In-Browser Sandbox</label>
-                  <span className="text-[11px] text-zinc-500 font-mono">Press Cmd+Enter to run</span>
+                  <label htmlFor="task-prompt-input" id="sandbox-label" className="block text-xs font-mono text-zinc-600 uppercase tracking-wider font-semibold">2. Test In-Browser Sandbox</label>
+                  <span className="text-[11px] text-zinc-600 font-mono">Press Cmd+Enter to run</span>
                 </div>
                 <div className="relative">
                   <textarea

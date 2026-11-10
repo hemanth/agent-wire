@@ -12,16 +12,17 @@ interface OpenRouterModalProps {
 export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, onSaveKey, onClose }) => {
   const [manualKey, setManualKey] = useState(currentKey || '');
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
   const modalRef = useModalA11y<HTMLDivElement>({ isOpen: true, onClose });
 
   const handleStartOAuth = async () => {
     try {
+      setOauthError(null);
       setIsRedirecting(true);
       await initiateOAuth();
     } catch (err: any) {
       setIsRedirecting(false);
-      console.error('Failed to initiate PKCE flow', err);
-      alert('Could not start OpenRouter OAuth: ' + (err.message || err));
+      setOauthError('Could not start OpenRouter OAuth: ' + (err.message || String(err)));
     }
   };
 
@@ -97,11 +98,16 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
               <span>{isRedirecting ? 'Redirecting to OpenRouter...' : 'Sign In with OpenRouter'}</span>
               <ExternalLink className="w-3.5 h-3.5 opacity-80" aria-hidden="true" />
             </button>
+            {oauthError && (
+              <div role="alert" className="text-xs font-mono text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                {oauthError}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-zinc-200" />
-            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Or Enter Key Manually</span>
+            <span className="text-[11px] font-mono text-zinc-600 uppercase tracking-wider">Or Enter Key Manually</span>
             <div className="flex-1 h-px bg-zinc-200" />
           </div>
 
@@ -109,7 +115,7 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
           <form onSubmit={handleSaveManual} className="space-y-4">
             <div>
               <label htmlFor="openrouter-api-key-input" className="block text-xs font-mono text-zinc-700 font-medium mb-1.5">
-                OpenRouter API Key (<code className="text-zinc-500">sk-or-v1-...</code>)
+                OpenRouter API Key (<code className="text-zinc-600">sk-or-v1-...</code>)
               </label>
               <input
                 id="openrouter-api-key-input"
@@ -119,7 +125,7 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
                 placeholder="sk-or-v1-xxxxxxxxxxxxxxxx"
                 className="w-full rounded-xl bg-white border border-zinc-300 px-3.5 py-2.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-500 focus-visible:ring-2 focus-visible:ring-zinc-200 font-mono shadow-2xs"
               />
-              <p className="text-[11px] text-zinc-500 mt-1.5">
+              <p className="text-[11px] text-zinc-600 mt-1.5">
                 Keys remain solely in your browser's local storage and are passed directly to OpenRouter.
               </p>
             </div>

@@ -14,6 +14,11 @@ export default {
         subtle: '#27272a',
         border: 'rgba(255, 255, 255, 0.08)',
         'border-strong': 'rgba(255, 255, 255, 0.16)',
+        zinc: {
+          150: '#ececee',
+          750: '#333338',
+          850: '#1f1f23',
+        },
         pastel: {
           mint: '#D3F8E2',     // Edge runtime & live health
           lilac: '#E4C1F9',    // OpenRouter models & fallback
@@ -23,6 +28,13 @@ export default {
           ink: '#121316',      // Deep contrast ink
           cream: '#FAF8F5',    // Soft pastel canvas
         },
+      },
+      boxShadow: {
+        '2xs': '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+        xs: '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.04)',
+      },
+      spacing: {
+        '0.2': '0.05rem',
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],

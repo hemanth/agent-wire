@@ -198,13 +198,14 @@ test.describe('Modern AI Stack: MCP, A2A v1.0, OpenAI v1, SSE, Guardrails, Evals
     // OpenAI Responses API (/v1/responses)
     const respRes = await request.post(`${BASE_URL}/v1/responses`, {
       data: {
-        model: 'agentwire/pr-triager',
+        model: 'agentwire/pr-triage',
         input: 'Triage PR #42 for SQL injection regressions.'
       }
     });
     expect(respRes.ok()).toBeTruthy();
     const respBody = await respRes.json();
     expect(respBody.object).toBe('response');
+    expect(respBody.model).toBe('agt_pr_triage');
     expect(respBody.output_text).toContain('Execution Summary');
   });
 

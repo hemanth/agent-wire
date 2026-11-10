@@ -92,11 +92,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onGoToStudio, onGoToFl
               {DEMOS.map((d, i) => (
                 <button
                   key={d.name}
+                  type="button"
+                  aria-pressed={activeDemo === i}
                   onClick={() => setActiveDemo(i)}
                   className={`px-3 py-1 rounded-full text-xs font-mono transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                     activeDemo === i
                       ? 'bg-zinc-950 text-white font-medium shadow-2xs'
-                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600'
+                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
                   }`}
                 >
                   {d.name}
@@ -116,7 +118,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onGoToStudio, onGoToFl
                   Task: "{demo.task}"
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+              <div className="flex items-center gap-2 text-[11px] text-zinc-600">
                 <span className="px-2 py-0.5 rounded-full bg-white border border-zinc-200 text-zinc-700 shadow-2xs">
                   {demo.model}
                 </span>

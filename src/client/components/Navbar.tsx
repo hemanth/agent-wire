@@ -18,6 +18,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuthModal,
   onOpenKeysModal
 }) => {
+  const tabs: Array<'landing' | 'fleet' | 'studio'> = ['landing', 'fleet', 'studio'];
+  const handleTabKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const nextIdx = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+      const nextTab = tabs[nextIdx];
+      setActiveTab(nextTab);
+      document.getElementById(`nav-tab-${nextTab}`)?.focus();
+    }
+  };
+
   return (
     <header className="border-b border-zinc-200/70 bg-white/80 sticky top-0 z-40 backdrop-blur-md shadow-[0_2px_16px_rgba(0,0,0,0.02)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -37,46 +48,60 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Tab Navigation: ToneBird Pill Switcher */}
-        <nav aria-label="Main Views" className="flex items-center bg-zinc-100/90 p-1 rounded-full border border-zinc-200/80 shadow-2xs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={activeTab === 'landing'}
-            onClick={() => setActiveTab('landing')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-              activeTab === 'landing'
-                ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
-                : 'text-zinc-600 hover:text-zinc-950 hover:bg-white/50'
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Overview</span>
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'fleet'}
-            onClick={() => setActiveTab('fleet')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-              activeTab === 'fleet'
-                ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
-                : 'text-zinc-600 hover:text-zinc-950 hover:bg-white/50'
-            }`}
-          >
-            <Bot className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Fleet ({agentCount})</span>
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'studio'}
-            onClick={() => setActiveTab('studio')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
-              activeTab === 'studio'
-                ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
-                : 'text-zinc-600 hover:text-zinc-950 hover:bg-white/50'
-            }`}
-          >
-            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>New Agent</span>
-          </button>
+        <nav aria-label="Main navigation">
+          <div aria-label="Workspace views" className="flex items-center bg-zinc-100/90 p-1 rounded-full border border-zinc-200/80 shadow-2xs" role="tablist">
+            <button
+              id="nav-tab-landing"
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'landing'}
+              aria-controls="main-content"
+              onClick={() => setActiveTab('landing')}
+              onKeyDown={e => handleTabKeyDown(e, 0)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                activeTab === 'landing'
+                  ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/50'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Overview</span>
+            </button>
+            <button
+              id="nav-tab-fleet"
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'fleet'}
+              aria-controls="main-content"
+              onClick={() => setActiveTab('fleet')}
+              onKeyDown={e => handleTabKeyDown(e, 1)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                activeTab === 'fleet'
+                  ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/50'
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Fleet ({agentCount})</span>
+            </button>
+            <button
+              id="nav-tab-studio"
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'studio'}
+              aria-controls="main-content"
+              onClick={() => setActiveTab('studio')}
+              onKeyDown={e => handleTabKeyDown(e, 2)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+                activeTab === 'studio'
+                  ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/50'
+              }`}
+            >
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>New Agent</span>
+            </button>
+          </div>
         </nav>
 
         {/* Auth & API Keys / Status Pills */}

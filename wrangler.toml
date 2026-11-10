@@ -5,6 +5,28 @@ compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
+run_worker_first = [
+  "/",
+  "/index.html",
+  "/index.md",
+  "/api/*",
+  "/mcp",
+  "/mcp/*",
+  "/v1/*",
+  "/healthz",
+  "/.well-known/*",
+  "/llms.txt",
+  "/llms-full.txt",
+  "/auth.md",
+  "/robots.txt",
+  "/openapi.json"
+]
+
+[vars]
+ENVIRONMENT = "production"
+ALLOWED_ORIGINS = "https://h3manth.com,https://www.h3manth.com,https://agent-wire.workers.dev"
+FEATURE_FLAGS = "mcpLiveExecution=true,a2aDelegation=true,openAiFacade=true,evalSuite=true,strictGuardrails=true"
 
 # KV namespace for persisting deployed agents across Cloudflare edge
 # Run: wrangler kv:namespace create AGENTS_KV

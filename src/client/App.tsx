@@ -1,15 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Navbar } from './components/Navbar.tsx';
 import { LandingPage } from './components/landing/LandingPage.tsx';
-import { AgentFleet } from './components/AgentFleet.tsx';
-import { AgentStudio } from './components/AgentStudio.tsx';
-import { AgentRunnerModal } from './components/AgentRunnerModal.tsx';
-import { OpenRouterModal } from './components/OpenRouterModal.tsx';
-import { ApiKeysModal } from './components/ApiKeysModal.tsx';
 import { Agent } from '../types.ts';
 import { STARTER_AGENTS } from '../presets.ts';
 import { getStoredApiKey, setStoredApiKey, clearStoredApiKey, exchangeOAuthCode } from './lib/openrouter-auth.ts';
+import { getStoredWireApiKey } from './lib/runtime-init.ts';
 import { CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
+
+const AgentFleet = lazy(() => import('./components/AgentFleet.tsx').then(m => ({ default: m.AgentFleet })));
+const AgentStudio = lazy(() => import('./components/AgentStudio.tsx').then(m => ({ default: m.AgentStudio })));
+const AgentRunnerModal = lazy(() =>
+  import('./components/AgentRunnerModal.tsx').then(m => ({ default: m.AgentRunnerModal }))
+);
+const OpenRouterModal = lazy(() =>
+  import('./components/OpenRouterModal.tsx').then(m => ({ default: m.OpenRouterModal }))
+);
+const ApiKeysModal = lazy(() => import('./components/ApiKeysModal.tsx').then(m => ({ default: m.ApiKeysModal })));
 
 export const App: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>(STARTER_AGENTS);
@@ -23,15 +29,18 @@ export const App: React.FC = () => {
   // Load agents from backend API
   const fetchAgents = async () => {
     try {
-      const res = await fetch('/api/agents');
+      const wireKey = getStoredWireApiKey();
+      const res = await fetch('/api/agents', {
+        headers: wireKey ? { 'X-AgentWire-Key': wireKey } : undefined
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setAgents(data);
         }
       }
-    } catch (err) {
-      console.warn('Using local starter agents:', err);
+    } catch {
+      // Fallback to bundled STARTER_AGENTS when offline
     }
   };
 
@@ -52,14 +61,14 @@ export const App: React.FC = () => {
     if (code) {
       setAuthBanner({ type: 'loading', message: 'Exchanging authorization code with OpenRouter...' });
 
-      exchangeOAuthCode(code)
+      const returnedState = searchParams.get('state');
+      exchangeOAuthCode(code, returnedState)
         .then(key => {
           setOpenRouterKey(key);
           setAuthBanner({ type: 'success', message: 'Successfully connected to OpenRouter!' });
           setTimeout(() => setAuthBanner(null), 5000);
         })
         .catch(err => {
-          console.error('OAuth exchange error:', err);
           setAuthBanner({
             type: 'error',
             message: `OpenRouter sign-in failed: ${err.message || 'Key exchange failed'}. You can still paste your API key manually.`
@@ -91,18 +100,34 @@ export const App: React.FC = () => {
 
   const handleDeleteAgent = async (id: string) => {
     try {
-      await fetch(`/api/agents/${id}`, { method: 'DELETE' });
-      setAgents(prev => prev.filter(a => a.id !== id));
-      if (selectedAgent?.id === id) {
-        setSelectedAgent(null);
+      const wireKey = getStoredWireApiKey();
+      const res = await fetch(`/api/agents/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: wireKey ? { 'X-AgentWire-Key': wireKey } : undefined
+      });
+      if (res.ok) {
+        setAgents(prev => prev.filter(a => a.id !== id));
+        if (selectedAgent?.id === id) {
+          setSelectedAgent(null);
+        }
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        setAuthBanner({ type: 'error', message: errBody.error || `Failed to delete agent (HTTP ${res.status}).` });
       }
-    } catch (err) {
-      console.error('Failed to delete agent', err);
+    } catch {
+      setAuthBanner({ type: 'error', message: 'Failed to delete agent. Please try again.' });
     }
   };
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex flex-col text-zinc-900">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-xl focus:bg-zinc-950 focus:text-white focus:text-xs focus:font-mono focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -126,9 +151,9 @@ export const App: React.FC = () => {
           }`}
         >
           <div className="max-w-7xl mx-auto flex items-center gap-2 flex-1">
-            {authBanner.type === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600 shrink-0" />}
-            {authBanner.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-            {authBanner.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
+            {authBanner.type === 'loading' && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-600 shrink-0" aria-hidden="true" />}
+            {authBanner.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" aria-hidden="true" />}
+            {authBanner.type === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-700 shrink-0" aria-hidden="true" />}
             <span className="font-medium">{authBanner.message}</span>
           </div>
           <button
@@ -136,59 +161,75 @@ export const App: React.FC = () => {
             className="p-1 hover:bg-black/5 rounded text-zinc-600 hover:text-zinc-900"
             aria-label="Dismiss message"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
         </div>
       )}
 
-      <main className="flex-1">
-        {activeTab === 'landing' ? (
-          <LandingPage
-            agents={agents}
-            onSelectAgent={setSelectedAgent}
-            onDeleteAgent={handleDeleteAgent}
-            onGoToStudio={() => setActiveTab('studio')}
-            onGoToFleet={() => setActiveTab('fleet')}
-          />
-        ) : activeTab === 'fleet' ? (
-          <AgentFleet
-            agents={agents}
-            onSelectAgent={setSelectedAgent}
-            onDeleteAgent={handleDeleteAgent}
-            onNewAgent={() => setActiveTab('studio')}
-          />
-        ) : (
-          <AgentStudio
-            onDeploySuccess={handleDeploySuccess}
-            openRouterKey={openRouterKey}
-            onOpenAuthModal={() => setIsAuthModalOpen(true)}
-          />
-        )}
+      <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
+        <Suspense
+          fallback={
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 text-center text-xs font-mono text-zinc-600" role="status" aria-busy="true">
+              Loading view...
+            </div>
+          }
+        >
+          {activeTab === 'landing' ? (
+            <LandingPage
+              agents={agents}
+              onSelectAgent={setSelectedAgent}
+              onDeleteAgent={handleDeleteAgent}
+              onGoToStudio={() => setActiveTab('studio')}
+              onGoToFleet={() => setActiveTab('fleet')}
+            />
+          ) : activeTab === 'fleet' ? (
+            <AgentFleet
+              agents={agents}
+              onSelectAgent={setSelectedAgent}
+              onDeleteAgent={handleDeleteAgent}
+              onNewAgent={() => setActiveTab('studio')}
+            />
+          ) : (
+            <AgentStudio
+              onDeploySuccess={handleDeploySuccess}
+              openRouterKey={openRouterKey}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )}
+        </Suspense>
       </main>
 
       {/* Runner / Sandbox Modal */}
       {selectedAgent && (
-        <AgentRunnerModal
-          agent={selectedAgent}
-          onClose={() => setSelectedAgent(null)}
-          openRouterKey={openRouterKey}
-        />
+        <Suspense fallback={null}>
+          <AgentRunnerModal
+            agent={selectedAgent}
+            onClose={() => setSelectedAgent(null)}
+            openRouterKey={openRouterKey}
+          />
+        </Suspense>
       )}
 
       {/* OpenRouter PKCE Auth Modal */}
       {isAuthModalOpen && (
-        <OpenRouterModal
-          currentKey={openRouterKey}
-          onSaveKey={handleSaveOpenRouterKey}
-          onClose={() => setIsAuthModalOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <OpenRouterModal
+            currentKey={openRouterKey}
+            onSaveKey={handleSaveOpenRouterKey}
+            onClose={() => setIsAuthModalOpen(false)}
+          />
+        </Suspense>
       )}
 
       {/* API Keys & Permissions Modal */}
-      <ApiKeysModal
-        isOpen={isKeysModalOpen}
-        onClose={() => setIsKeysModalOpen(false)}
-      />
+      {isKeysModalOpen && (
+        <Suspense fallback={null}>
+          <ApiKeysModal
+            isOpen={isKeysModalOpen}
+            onClose={() => setIsKeysModalOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

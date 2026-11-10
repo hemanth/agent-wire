@@ -56,25 +56,25 @@ export const SkillsSection: React.FC<SkillsSectionProps> = ({ skills, onToggleSk
               className={`p-4 rounded-xl border cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 skill.enabled
                   ? 'border-zinc-900 bg-zinc-50 shadow-2xs'
-                  : 'border-zinc-200 bg-white opacity-70 hover:opacity-100 shadow-2xs'
+                  : 'border-zinc-200 bg-white hover:border-zinc-300 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
-                  <span id={titleId} className={`font-semibold text-xs ${skill.enabled ? 'text-zinc-950' : 'text-zinc-700'}`}>
+                  <span id={titleId} className={`font-semibold text-xs ${skill.enabled ? 'text-zinc-950' : 'text-zinc-800'}`}>
                     {skill.name}
                   </span>
                   <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
                     skill.enabled
                       ? 'text-zinc-900 bg-white border-zinc-300 font-medium shadow-2xs'
-                      : 'text-zinc-500 bg-zinc-100 border-zinc-200'
+                      : 'text-zinc-700 bg-zinc-100 border-zinc-200'
                   }`}>
                     {skill.id}
                   </span>
                 </div>
                 <div
                   className={`w-9 h-5 rounded-full p-0.5 transition-colors relative ${
-                    skill.enabled ? 'bg-zinc-950' : 'bg-zinc-200'
+                    skill.enabled ? 'bg-zinc-950' : 'bg-zinc-300'
                   }`}
                   aria-hidden="true"
                 >
@@ -85,7 +85,7 @@ export const SkillsSection: React.FC<SkillsSectionProps> = ({ skills, onToggleSk
                   />
                 </div>
               </div>
-              <p id={descId} className={`text-xs leading-relaxed ${skill.enabled ? 'text-zinc-700' : 'text-zinc-500'}`}>
+              <p id={descId} className={`text-xs leading-relaxed ${skill.enabled ? 'text-zinc-700' : 'text-zinc-600'}`}>
                 {skill.description}
               </p>
             </div>

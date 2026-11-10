@@ -47,21 +47,23 @@ export const SessionBar: React.FC<SessionBarProps> = ({
         <div className="flex items-center gap-2">
           <Layers className="w-3.5 h-3.5 text-zinc-500" aria-hidden="true" />
           <span className="font-semibold text-zinc-900">Execution Mode:</span>
-          <div className="flex items-center bg-zinc-200/80 p-0.5 rounded-lg text-[11px]">
+          <div className="flex items-center bg-zinc-200/80 p-0.5 rounded-lg text-[11px]" role="group" aria-label="Session execution mode">
             <button
               type="button"
+              aria-pressed={!enabled}
               onClick={() => onToggle(false)}
               className={`px-2 py-0.5 rounded transition-all ${
-                !enabled ? 'bg-white text-zinc-950 font-bold shadow-2xs' : 'text-zinc-600 hover:text-zinc-900'
+                !enabled ? 'bg-white text-zinc-950 font-bold shadow-2xs' : 'text-zinc-700 hover:text-zinc-950'
               }`}
             >
               Stateless
             </button>
             <button
               type="button"
+              aria-pressed={enabled}
               onClick={() => onToggle(true)}
               className={`px-2 py-0.5 rounded transition-all ${
-                enabled ? 'bg-white text-zinc-950 font-bold shadow-2xs' : 'text-zinc-600 hover:text-zinc-900'
+                enabled ? 'bg-white text-zinc-950 font-bold shadow-2xs' : 'text-zinc-700 hover:text-zinc-950'
               }`}
             >
               Stateful Thread
@@ -71,12 +73,13 @@ export const SessionBar: React.FC<SessionBarProps> = ({
 
         {enabled && (
           <div className="flex items-center gap-2">
-            <span className="text-zinc-500">History:</span>
+            <span className="text-zinc-600">History:</span>
             <span className="px-1.5 py-0.5 rounded bg-white border border-zinc-200 text-zinc-900 font-semibold shadow-2xs">
               {messagesCount} turns
             </span>
             <button
               type="button"
+              aria-expanded={showMemoryEditor}
               onClick={() => setShowMemoryEditor(!showMemoryEditor)}
               className="flex items-center gap-1 px-2 py-0.5 rounded bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-700 shadow-2xs transition-colors"
             >
@@ -120,7 +123,7 @@ export const SessionBar: React.FC<SessionBarProps> = ({
           </div>
 
           {memoryKeys.length === 0 ? (
-            <div className="text-[11px] text-zinc-400 py-1 italic">
+            <div className="text-[11px] text-zinc-600 py-1 italic">
               No memory variables set. Add key-value pairs below or pass via API.
             </div>
           ) : (
@@ -134,10 +137,10 @@ export const SessionBar: React.FC<SessionBarProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDeleteMemory(k)}
-                    className="p-1 hover:text-rose-600 text-zinc-400 transition-colors"
+                    className="p-1 hover:text-rose-600 text-zinc-500 transition-colors"
                     aria-label={`Remove memory key ${k}`}
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3 h-3" aria-hidden="true" />
                   </button>
                 </div>
               ))}
@@ -147,12 +150,14 @@ export const SessionBar: React.FC<SessionBarProps> = ({
           <div className="flex items-center gap-1.5 pt-1">
             <input
               placeholder="Key"
+              aria-label="Memory variable key"
               value={newKey}
               onChange={e => setNewKey(e.target.value)}
               className="w-1/3 bg-zinc-50 border border-zinc-200 rounded px-2 py-1 text-[11px] text-zinc-900 focus:outline-none focus:border-zinc-400"
             />
             <input
               placeholder="Value"
+              aria-label="Memory variable value"
               value={newVal}
               onChange={e => setNewVal(e.target.value)}
               className="flex-1 bg-zinc-50 border border-zinc-200 rounded px-2 py-1 text-[11px] text-zinc-900 focus:outline-none focus:border-zinc-400"
@@ -163,7 +168,7 @@ export const SessionBar: React.FC<SessionBarProps> = ({
               disabled={!newKey.trim()}
               className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-900 hover:bg-black disabled:opacity-40 text-white text-[11px] transition-colors"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-3 h-3" aria-hidden="true" />
               <span>Add</span>
             </button>
           </div>

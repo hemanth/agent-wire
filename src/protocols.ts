@@ -1,4 +1,5 @@
 import type { Agent } from './types.ts';
+import type { Env } from './store.ts';
 import { BUILTIN_SKILLS } from './presets.ts';
 
 export const AGENT_DISCOVERY_LINK_HEADER = [
@@ -12,14 +13,62 @@ export const AGENT_DISCOVERY_LINK_HEADER = [
 
 export const CONTENT_SIGNAL_HEADER = 'ai-train=yes, search=yes, ai-input=yes';
 
+export const SECURITY_HEADERS: Record<string, string> = {
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://openrouter.ai; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '0',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
+};
+
+export const PRODUCTION_ALLOWED_ORIGINS = [
+  'https://h3manth.com',
+  'https://www.h3manth.com',
+  'https://agent-wire.workers.dev'
+];
+
+export const DEV_ALLOWED_ORIGINS = [
+  'http://localhost:8787',
+  'http://127.0.0.1:8787',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173'
+];
+
+export function resolveCorsOrigin(
+  requestOrigin: string | null,
+  selfOrigin: string,
+  configuredOriginsCsv?: string,
+  environment?: string
+): string {
+  const allowlist = new Set<string>([
+    selfOrigin,
+    ...PRODUCTION_ALLOWED_ORIGINS,
+    ...(environment === 'production' ? [] : DEV_ALLOWED_ORIGINS)
+  ]);
+  if (configuredOriginsCsv) {
+    for (const raw of configuredOriginsCsv.split(',')) {
+      const trimmed = raw.trim();
+      if (trimmed && trimmed !== '*') allowlist.add(trimmed);
+    }
+  }
+  if (requestOrigin && allowlist.has(requestOrigin)) {
+    return requestOrigin;
+  }
+  return selfOrigin;
+}
+
 export const AGENT_READY_HEADERS: Record<string, string> = {
   Link: AGENT_DISCOVERY_LINK_HEADER,
   'content-signal': CONTENT_SIGNAL_HEADER,
-  Vary: 'Accept'
+  Vary: 'Accept, Accept-Encoding, Origin',
+  ...SECURITY_HEADERS
 };
 
 export function wantsMarkdown(acceptHeader: string | null): boolean {
-  if (!acceptHeader || !acceptHeader.includes('text/markdown')) return false;
+  if (!acceptHeader || !acceptHeader.toLowerCase().includes('text/markdown')) return false;
   const parts = acceptHeader.split(',').map(p => p.trim());
   let mdQ = -1;
   let htmlQ = -1;
@@ -27,12 +76,15 @@ export function wantsMarkdown(acceptHeader: string | null): boolean {
     const [type, ...params] = part.split(';').map(s => s.trim());
     let q = 1.0;
     for (const param of params) {
-      if (param.startsWith('q=')) q = parseFloat(param.slice(2)) || q;
+      if (param.toLowerCase().startsWith('q=')) {
+        const parsed = Number.parseFloat(param.slice(2));
+        if (!Number.isNaN(parsed)) q = parsed;
+      }
     }
     if (type.toLowerCase() === 'text/markdown') mdQ = q;
     if (type.toLowerCase() === 'text/html') htmlQ = q;
   }
-  return mdQ >= 0 && (htmlQ < 0 || mdQ >= htmlQ);
+  return mdQ > 0 && (htmlQ <= 0 || mdQ >= htmlQ);
 }
 
 export async function sha256Hex(content: string): Promise<string> {
@@ -341,18 +393,31 @@ export function buildOAuthProtectedResource(origin: string) {
   };
 }
 
-export const WEB_BOT_AUTH_JWKS = {
-  keys: [
-    {
-      kty: 'OKP',
-      crv: 'Ed25519',
-      x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo',
-      kid: 'agentwire-ed25519-key-1',
+let cachedRuntimePublicJwk: Record<string, unknown> | null = null;
+
+export async function getWebBotAuthJwks(env?: Env): Promise<{ keys: Array<Record<string, unknown>> }> {
+  if (env?.WEB_BOT_AUTH_PUBLIC_JWK) {
+    try {
+      const parsed = JSON.parse(env.WEB_BOT_AUTH_PUBLIC_JWK);
+      if (parsed && typeof parsed === 'object') {
+        return { keys: Array.isArray(parsed.keys) ? parsed.keys : [parsed] };
+      }
+    } catch {}
+  }
+  if (!cachedRuntimePublicJwk) {
+    const pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])) as CryptoKeyPair;
+    const exported = (await crypto.subtle.exportKey('jwk', pair.publicKey)) as unknown as Record<string, unknown>;
+    cachedRuntimePublicJwk = {
+      kty: exported.kty || 'OKP',
+      crv: exported.crv || 'Ed25519',
+      x: exported.x,
+      kid: 'agentwire-ed25519-runtime-1',
       use: 'sig',
       alg: 'Ed25519'
-    }
-  ]
-};
+    };
+  }
+  return { keys: [cachedRuntimePublicJwk] };
+}
 
 export function buildAuthMd(origin: string): string {
   return `# AgentWire Authentication & Rate Limits
@@ -396,6 +461,24 @@ export function buildOpenApiSpec(origin: string) {
     },
     servers: [{ url: origin }],
     paths: {
+      '/api/health': {
+        get: {
+          summary: 'Service health check, storage status, SLO error budget gate, and active feature flags',
+          operationId: 'getHealth'
+        }
+      },
+      '/api/metrics': {
+        get: {
+          summary: 'RED metrics snapshot (p50/p95/p99 latency histograms, status classes, and error budget)',
+          operationId: 'getMetrics'
+        }
+      },
+      '/api/flags': {
+        get: {
+          summary: 'Inspect feature flags, rollout percentages, owners, and expiration dates',
+          operationId: 'getFeatureFlags'
+        }
+      },
       '/api/agents': {
         get: { summary: 'List all deployed agents', operationId: 'listAgents' },
         post: { summary: 'Deploy a new agent with MCPs, skills, guardrails, and model failover', operationId: 'createAgent' }

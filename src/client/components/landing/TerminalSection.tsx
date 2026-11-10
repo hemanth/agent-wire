@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, Play, CheckCircle2 } from 'lucide-react';
+import { Copy, Check, CheckCircle2 } from 'lucide-react';
 import { CodeBlock } from '../CodeBlock';
+import { getPublicBaseUrl } from '../../lib/runtime-init';
 
 export const TerminalSection: React.FC = () => {
   const [copied, setCopied] = useState(false);
+  const baseUrl = getPublicBaseUrl();
 
-  const curlCommand = `curl -X POST http://localhost:8787/api/agents/taste-critic/run \\
+  const curlCommand = `curl -X POST ${baseUrl}/api/agents/design-critic/run \\
   -H "Content-Type: application/json" \\
   -d '{"task": "Analyze UI layout for excessive vibe-coded tropes"}'`;
 
@@ -57,39 +59,39 @@ export const TerminalSection: React.FC = () => {
         </div>
 
         {/* Terminal Content */}
-        <div className="p-4 sm:p-5 space-y-4 leading-relaxed overflow-x-auto text-zinc-300">
+        <div className="p-4 sm:p-5 space-y-4 leading-relaxed overflow-x-auto text-zinc-200">
           <div>
-            <div className="text-zinc-500 mb-1"># 1. Dispatch request from anywhere</div>
+            <div className="text-slate-400 mb-1"># 1. Dispatch request from anywhere</div>
             <CodeBlock code={curlCommand} language="bash" className="text-xs" />
           </div>
 
           <div className="pt-2 border-t border-zinc-900 space-y-1.5 text-[11px]">
-            <div className="text-zinc-500 mb-1"># 2. AgentWire serverless edge response</div>
+            <div className="text-slate-400 mb-1"># 2. AgentWire serverless edge response</div>
             <div className="flex items-center gap-2 text-emerald-400">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+              <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
               <span>HTTP/1.1 200 OK (latency: 1.18s, cold_start: 0ms)</span>
             </div>
-            <div className="text-zinc-300">
-              <span className="text-zinc-500">&gt; MCP Tool Discovered: </span>
+            <div className="text-zinc-200">
+              <span className="text-slate-400">&gt; MCP Tool Discovered: </span>
               <span className="text-emerald-300 underline">stitch_inspect_screen</span>
             </div>
-            <div className="text-zinc-300">
-              <span className="text-zinc-500">&gt; Model Fallback Chain: </span>
-              <span className="text-zinc-200">claude-3.5-sonnet (active)</span>
+            <div className="text-zinc-200">
+              <span className="text-slate-400">&gt; Model Fallback Chain: </span>
+              <span className="text-zinc-100">claude-3.5-sonnet (active)</span>
             </div>
-            <div className="text-zinc-300">
-              <span className="text-zinc-500">&gt; Applied Skill: </span>
-              <span className="text-zinc-200">taste-skill (high contrast, typographic balance enforced)</span>
+            <div className="text-zinc-200">
+              <span className="text-slate-400">&gt; Applied Skill: </span>
+              <span className="text-zinc-100">taste-skill (high contrast, typographic balance enforced)</span>
             </div>
           </div>
 
           <div className="pt-2 border-t border-zinc-900">
-            <div className="text-zinc-500 mb-1"># 3. Parsed JSON output</div>
+            <div className="text-slate-400 mb-1"># 3. Parsed JSON output</div>
             <div className="bg-black/50 p-3 rounded-lg border border-zinc-800/80 overflow-x-auto">
               <CodeBlock
                 code={`{
-  "agent": "taste-critic",
-  "status": "completed",
+  "agentId": "agt_design_critic",
+  "status": "success",
   "modelUsed": "anthropic/claude-3.5-sonnet",
   "toolsUsed": ["stitch_inspect_screen"],
   "result": "UI Audit Complete: All components satisfy WCAG AA contrast. AI-slop tropes eliminated."

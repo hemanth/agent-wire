@@ -84,6 +84,23 @@ Every deployed agent automatically exposes four standard protocols:
 - `/.well-known/http-message-signatures-directory` (RFC 9421 Web Bot Auth Ed25519 JWKS)
 - `/openapi.json`, `/llms.txt`, `/auth.md`, `/robots.txt`
 
+## Operations, Health & Tests
+
+```bash
+curl -fsS http://localhost:8787/api/health
+curl -fsS http://localhost:8787/api/metrics
+npm test
+```
+
+`/api/health` (`/healthz`) reports service status, feature flags, and the `99.5%` SLO error-budget gate. `/api/metrics` exposes RED request rates and `p50`/`p95`/`p99` latency histograms. `npm test` runs the full Playwright E2E and `axe-core` WCAG 2.1 AA suite.
+
+- `OPENROUTER_API_KEY` — Server-side OpenRouter key fallback
+- `ENVIRONMENT` — Set to `production` in production deployments
+- `ALLOWED_ORIGINS` — Comma-separated CORS origin allowlist
+- `FEATURE_FLAGS` — Runtime flag overrides (e.g. `mcpLiveExecution=false`)
+
+See [LAUNCH.md](LAUNCH.md) for the production rollout, monitoring, and `< 5 min` rollback runbook.
+
 ## Deploy to Cloudflare
 
 ```bash

@@ -5,16 +5,84 @@ import type {
   AgentSession
 } from './types.ts';
 import { STARTER_AGENTS } from './presets.ts';
+import { logStructured } from './telemetry.ts';
 
 export interface Env {
   AGENTS_KV?: {
     get(key: string): Promise<string | null>;
     put(key: string, value: string): Promise<void>;
     delete(key: string): Promise<void>;
-    list(): Promise<{ keys: Array<{ name: string }> }>;
+    list(options?: { prefix?: string; limit?: number }): Promise<{ keys: Array<{ name: string }> }>;
+  };
+  ASSETS?: {
+    fetch(request: Request): Promise<Response>;
   };
   OPENROUTER_API_KEY?: string;
+  ENVIRONMENT?: string;
+  BASE_PATH?: string;
+  ALLOWED_ORIGINS?: string;
+  FEATURE_FLAGS?: string;
+  ALLOW_DEMO_KEY?: string;
+  ADMIN_SECRET?: string;
+  WEB_BOT_AUTH_PUBLIC_JWK?: string;
   AI?: unknown;
+}
+
+export function cryptoRandomHex(bytes = 8): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export function getClientIp(request: Request): string {
+  return (
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-trusted-client-ip') ||
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    '127.0.0.1'
+  );
+}
+
+export function extractWireKey(request: Request): string {
+  const authHeader = request.headers.get('Authorization') || '';
+  if (authHeader.startsWith('Bearer ')) {
+    const bearer = authHeader.slice(7).trim();
+    if (bearer.startsWith('wire_live_')) return bearer;
+  }
+  return (request.headers.get('X-AgentWire-Key') || request.headers.get('X-Agent-Key') || '').trim();
+}
+
+export function sanitizeAgentForPublic(agent: Agent): Agent {
+  const { openRouterKey: _omittedKey, ...rest } = agent;
+  const sanitizedMcps = (agent.mcps || []).map(mcp => {
+    if (!mcp.headers) return mcp;
+    const redactedHeaders: Record<string, string> = {};
+    for (const k of Object.keys(mcp.headers)) {
+      redactedHeaders[k] = '[REDACTED]';
+    }
+    return { ...mcp, headers: redactedHeaders };
+  });
+  return { ...rest, mcps: sanitizedMcps };
+}
+
+export function sanitizeAgentsForPublic(agents: Agent[]): Agent[] {
+  return agents.map(sanitizeAgentForPublic);
+}
+
+export function sanitizeAgentForListing(agent: Agent, isAuthorized = false): Agent {
+  const pub = sanitizeAgentForPublic(agent);
+  if (pub.visibility === 'private' && !isAuthorized) {
+    return {
+      ...pub,
+      systemPrompt: '[Private agent — supply an AgentWire API key to inspect or run]',
+      skills: (pub.skills || []).map(s => ({ ...s, content: '[REDACTED]' }))
+    };
+  }
+  return pub;
+}
+
+export function filterPublicAgents(agents: Agent[]): Agent[] {
+  return agents.filter(a => a.visibility !== 'private').map(sanitizeAgentForPublic);
 }
 
 export interface A2ATaskRecord {
@@ -43,20 +111,35 @@ export interface StoredApiKey {
 }
 
 const MAX_IN_MEMORY_AGENTS = 200;
+const MAX_IN_MEMORY_RUN_AGENTS = 200;
 const MAX_IN_MEMORY_SESSIONS = 500;
 const MAX_IN_MEMORY_A2A_TASKS = 500;
 const MAX_IN_MEMORY_API_KEYS = 200;
 const MAX_RATE_LIMIT_BUCKETS = 2000;
 
-// Bounded Map helper that evicts oldest entries when capacity is exceeded
-function setBounded<K, V>(map: Map<K, V>, key: K, value: V, maxEntries: number): void {
+// Bounded Map helper that evicts oldest evictable entries when capacity is exceeded
+function setBounded<K, V>(
+  map: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+  canEvict?: (val: V) => boolean
+): boolean {
   if (!map.has(key) && map.size >= maxEntries) {
-    const oldestKey = map.keys().next().value;
-    if (oldestKey !== undefined) {
-      map.delete(oldestKey);
+    let evicted = false;
+    for (const [candidateKey, candidateVal] of map.entries()) {
+      if (!canEvict || canEvict(candidateVal)) {
+        map.delete(candidateKey);
+        evicted = true;
+        break;
+      }
+    }
+    if (!evicted) {
+      return false;
     }
   }
   map.set(key, value);
+  return true;
 }
 
 // In-memory fallback stores for local dev or when KV is not configured
@@ -85,22 +168,35 @@ export function checkRateLimit(
   windowMs = 60000
 ): { allowed: boolean; remaining: number; resetAfterSec: number } {
   const now = Date.now();
-  // Opportunistic sweep when store grows large
+  const existing = rateLimitStore.get(key);
+  if (existing && now <= existing.resetAt) {
+    if (existing.count >= maxRequests) {
+      return { allowed: false, remaining: 0, resetAfterSec: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)) };
+    }
+    existing.count += 1;
+    return {
+      allowed: true,
+      remaining: maxRequests - existing.count,
+      resetAfterSec: Math.max(1, Math.ceil((existing.resetAt - now) / 1000))
+    };
+  }
+
+  if (existing && now > existing.resetAt) {
+    rateLimitStore.delete(key);
+  }
+
   if (rateLimitStore.size >= MAX_RATE_LIMIT_BUCKETS) {
     for (const [k, v] of rateLimitStore.entries()) {
       if (now > v.resetAt) rateLimitStore.delete(k);
     }
+    if (rateLimitStore.size >= MAX_RATE_LIMIT_BUCKETS) {
+      // Never evict active unexpired rate-limit buckets under spoofed traffic floods
+      return { allowed: false, remaining: 0, resetAfterSec: 15 };
+    }
   }
-  const entry = rateLimitStore.get(key);
-  if (!entry || now > entry.resetAt) {
-    setBounded(rateLimitStore, key, { count: 1, resetAt: now + windowMs }, MAX_RATE_LIMIT_BUCKETS);
-    return { allowed: true, remaining: maxRequests - 1, resetAfterSec: Math.ceil(windowMs / 1000) };
-  }
-  if (entry.count >= maxRequests) {
-    return { allowed: false, remaining: 0, resetAfterSec: Math.ceil((entry.resetAt - now) / 1000) };
-  }
-  entry.count += 1;
-  return { allowed: true, remaining: maxRequests - entry.count, resetAfterSec: Math.ceil((entry.resetAt - now) / 1000) };
+
+  rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+  return { allowed: true, remaining: maxRequests - 1, resetAfterSec: Math.ceil(windowMs / 1000) };
 }
 
 export function getOrGenerateTrace(request: Request): { traceId: string; spanId: string; traceparent: string } {
@@ -109,16 +205,12 @@ export function getOrGenerateTrace(request: Request): { traceId: string; spanId:
     const parts = incoming.split('-');
     return { traceId: parts[1], spanId: parts[2], traceparent: incoming };
   }
-  const traceId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  const spanId = Array.from(crypto.getRandomValues(new Uint8Array(8)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const traceId = cryptoRandomHex(16);
+  const spanId = cryptoRandomHex(8);
   return { traceId, spanId, traceparent: `00-${traceId}-${spanId}-01` };
 }
 
-async function hashKey(key: string): Promise<string> {
+export async function hashApiKey(key: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
   return Array.from(new Uint8Array(buf))
     .map(b => b.toString(16).padStart(2, '0'))
@@ -129,12 +221,10 @@ export async function createApiKey(
   name = 'Default API Key',
   env: Env
 ): Promise<{ key: string; record: AgentWireApiKey }> {
-  const rand = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const rand = cryptoRandomHex(16);
   const rawKey = `wire_live_${rand}`;
-  const keyHash = await hashKey(rawKey);
-  const id = `key_${Math.random().toString(36).substring(2, 9)}`;
+  const keyHash = await hashApiKey(rawKey);
+  const id = `key_${cryptoRandomHex(6)}`;
   const keyPrefix = `wire_live_${rand.substring(0, 4)}...${rand.substring(rand.length - 4)}`;
   const createdAt = new Date().toISOString();
 
@@ -151,16 +241,17 @@ export async function createApiKey(
 
 export async function validateApiKey(rawKey: string, env: Env): Promise<StoredApiKey | null> {
   if (!rawKey) return null;
-  if (rawKey === 'wire_live_demo12345') {
+  const isDemoAllowed = env.ENVIRONMENT === 'development' || env.ALLOW_DEMO_KEY === 'true';
+  if (isDemoAllowed && rawKey === 'wire_live_demo12345') {
     return {
       id: 'key_demo',
-      name: 'Demo Key',
+      name: 'Demo Key (Development Only)',
       keyHash: 'demo_hash',
       keyPrefix: 'wire_live_demo...345',
       createdAt: new Date().toISOString()
     };
   }
-  const keyHash = await hashKey(rawKey);
+  const keyHash = await hashApiKey(rawKey);
   for (const item of inMemoryApiKeys.values()) {
     if (item.keyHash === keyHash) {
       item.lastUsedAt = new Date().toISOString();
@@ -170,45 +261,116 @@ export async function validateApiKey(rawKey: string, env: Env): Promise<StoredAp
   if (env.AGENTS_KV) {
     const raw = await env.AGENTS_KV.get(`apikey:${keyHash}`);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      parsed.lastUsedAt = new Date().toISOString();
-      await env.AGENTS_KV.put(`apikey:${keyHash}`, JSON.stringify(parsed));
-      return parsed;
+      try {
+        const parsed: StoredApiKey = JSON.parse(raw);
+        parsed.lastUsedAt = new Date().toISOString();
+        await env.AGENTS_KV.put(`apikey:${keyHash}`, JSON.stringify(parsed));
+        await env.AGENTS_KV.put(`apikey_meta:${parsed.id}`, JSON.stringify(parsed));
+        return parsed;
+      } catch (e: any) {
+        logStructured('error', 'kv.apikey_parse_failed', { reason: e?.message || String(e) });
+      }
     }
   }
   return null;
 }
 
-export async function listApiKeys(_env: Env): Promise<AgentWireApiKey[]> {
-  const list: AgentWireApiKey[] = [];
-  for (const k of inMemoryApiKeys.values()) {
-    list.push({ id: k.id, name: k.name, keyPrefix: k.keyPrefix, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt });
-  }
-  return list;
+export async function authorizePrivateAgent(agent: Agent, request: Request, env: Env): Promise<boolean> {
+  if (agent.visibility !== 'private') return true;
+  const wireKey = extractWireKey(request);
+  const valid = await validateApiKey(wireKey, env);
+  return Boolean(valid);
 }
 
-export async function revokeApiKey(id: string, env: Env): Promise<boolean> {
-  const item = inMemoryApiKeys.get(id);
+export async function listApiKeys(env: Env, onlyId?: string): Promise<AgentWireApiKey[]> {
+  const byId = new Map<string, AgentWireApiKey>();
+  for (const k of inMemoryApiKeys.values()) {
+    if (!onlyId || k.id === onlyId) {
+      byId.set(k.id, { id: k.id, name: k.name, keyPrefix: k.keyPrefix, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt });
+    }
+  }
+  if (env.AGENTS_KV) {
+    try {
+      const listed = await env.AGENTS_KV.list({ prefix: 'apikey_meta:' });
+      for (const entry of listed.keys) {
+        if (!entry.name.startsWith('apikey_meta:')) continue;
+        const raw = await env.AGENTS_KV.get(entry.name);
+        if (!raw) continue;
+        try {
+          const k: StoredApiKey = JSON.parse(raw);
+          if (!onlyId || k.id === onlyId) {
+            byId.set(k.id, { id: k.id, name: k.name, keyPrefix: k.keyPrefix, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt });
+          }
+        } catch {}
+      }
+    } catch (e: any) {
+      logStructured('warn', 'kv.list_apikeys_failed', { reason: e?.message || String(e) });
+    }
+  }
+  return Array.from(byId.values());
+}
+
+export async function revokeApiKey(
+  id: string,
+  env: Env,
+  requiredCallerKeyHash?: string
+): Promise<'revoked' | 'not_found' | 'forbidden'> {
+  let record: StoredApiKey | undefined = inMemoryApiKeys.get(id);
+  if (!record && env.AGENTS_KV) {
+    const rawMeta = await env.AGENTS_KV.get(`apikey_meta:${id}`);
+    if (rawMeta) {
+      try {
+        record = JSON.parse(rawMeta) as StoredApiKey;
+      } catch {}
+    }
+  }
+  if (!record) {
+    return 'not_found';
+  }
+  if (requiredCallerKeyHash && record.keyHash !== requiredCallerKeyHash) {
+    return 'forbidden';
+  }
   inMemoryApiKeys.delete(id);
-  if (env.AGENTS_KV && item) {
-    await env.AGENTS_KV.delete(`apikey:${item.keyHash}`);
+  if (env.AGENTS_KV) {
+    await env.AGENTS_KV.delete(`apikey:${record.keyHash}`);
     await env.AGENTS_KV.delete(`apikey_meta:${id}`);
   }
-  return true;
+  return 'revoked';
 }
 
 export async function saveRunRecord(agentId: string, record: AgentRunRecord, env: Env): Promise<void> {
   const runs = inMemoryRuns.get(agentId) || [];
   runs.unshift(record);
   if (runs.length > 50) runs.pop();
-  inMemoryRuns.set(agentId, runs);
+  setBounded(inMemoryRuns, agentId, runs, MAX_IN_MEMORY_RUN_AGENTS);
 
   if (env.AGENTS_KV) {
     await env.AGENTS_KV.put(`run:${agentId}:${record.runId}`, JSON.stringify(record));
   }
 }
 
-export async function listAgentRuns(agentId: string, limit = 20, _env: Env): Promise<AgentRunRecord[]> {
+export async function listAgentRuns(agentId: string, limit = 20, env: Env): Promise<AgentRunRecord[]> {
+  if (env.AGENTS_KV) {
+    try {
+      const prefix = `run:${agentId}:`;
+      const listed = await env.AGENTS_KV.list({ prefix });
+      const kvRuns: AgentRunRecord[] = [];
+      for (const entry of listed.keys) {
+        if (!entry.name.startsWith(prefix)) continue;
+        const raw = await env.AGENTS_KV.get(entry.name);
+        if (!raw) continue;
+        try {
+          kvRuns.push(JSON.parse(raw));
+        } catch {}
+      }
+      if (kvRuns.length > 0) {
+        kvRuns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return kvRuns.slice(0, limit);
+      }
+    } catch (e: any) {
+      logStructured('warn', 'kv.list_runs_fallback_memory', { reason: e?.message || String(e) });
+    }
+  }
   const runs = inMemoryRuns.get(agentId) || [];
   return runs.slice(0, limit);
 }
@@ -220,8 +382,8 @@ export async function getSession(agentId: string, sessionId: string, env: Env): 
     if (data) {
       try {
         return JSON.parse(data);
-      } catch (e) {
-        console.error('Failed to parse session from KV', e);
+      } catch (e: any) {
+        logStructured('error', 'kv.session_parse_failed', { reason: e?.message || String(e) });
       }
     }
   }
@@ -236,15 +398,34 @@ export async function saveSession(session: AgentSession, env: Env): Promise<void
   }
 }
 
-export async function listSessions(agentId: string, _env: Env): Promise<AgentSession[]> {
-  const sessions: AgentSession[] = [];
-  const prefix = `${agentId}:`;
+export async function listSessions(agentId: string, env: Env): Promise<AgentSession[]> {
+  const byId = new Map<string, AgentSession>();
+  const memPrefix = `${agentId}:`;
   for (const [key, sess] of inMemorySessions.entries()) {
-    if (key.startsWith(prefix)) {
-      sessions.push(sess);
+    if (key.startsWith(memPrefix)) {
+      byId.set(sess.id, sess);
     }
   }
-  return sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  if (env.AGENTS_KV) {
+    try {
+      const kvPrefix = `session:${agentId}:`;
+      const listed = await env.AGENTS_KV.list({ prefix: kvPrefix });
+      for (const entry of listed.keys) {
+        if (!entry.name.startsWith(kvPrefix)) continue;
+        const raw = await env.AGENTS_KV.get(entry.name);
+        if (!raw) continue;
+        try {
+          const parsed: AgentSession = JSON.parse(raw);
+          byId.set(parsed.id, parsed);
+        } catch {}
+      }
+    } catch (e: any) {
+      logStructured('warn', 'kv.list_sessions_fallback_memory', { reason: e?.message || String(e) });
+    }
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
 }
 
 export async function deleteSession(agentId: string, sessionId: string, env: Env): Promise<boolean> {
@@ -257,20 +438,23 @@ export async function deleteSession(agentId: string, sessionId: string, env: Env
 }
 
 export async function getAgent(idOrSlug: string, env: Env): Promise<Agent | null> {
+  if (!idOrSlug || typeof idOrSlug !== 'string') return null;
+  const normalized = idOrSlug.replace(/^agent-?wire\//i, '');
   if (env.AGENTS_KV) {
-    const data = await env.AGENTS_KV.get(`agent:${idOrSlug}`);
+    const data = await env.AGENTS_KV.get(`agent:${normalized}`);
     if (data) {
       try {
         return JSON.parse(data);
-      } catch (e) {
-        console.error('Failed to parse agent from KV', e);
+      } catch (e: any) {
+        logStructured('error', 'kv.agent_parse_failed', { reason: e?.message || String(e) });
       }
     }
   }
-  const direct = inMemoryAgents.get(idOrSlug);
+  const direct = inMemoryAgents.get(idOrSlug) || inMemoryAgents.get(normalized);
   if (direct) return direct;
-  const normalized = idOrSlug.replace(/^agent-?wire\//i, '');
-  for (const ag of inMemoryAgents.values()) {
+
+  const allAgents = await listAgents(env);
+  for (const ag of allAgents) {
     if (ag.id === normalized || ag.slug === normalized) {
       return ag;
     }
@@ -279,7 +463,7 @@ export async function getAgent(idOrSlug: string, env: Env): Promise<Agent | null
 }
 
 export async function saveAgent(agent: Agent, env: Env): Promise<void> {
-  setBounded(inMemoryAgents, agent.id, agent, MAX_IN_MEMORY_AGENTS);
+  setBounded(inMemoryAgents, agent.id, agent, MAX_IN_MEMORY_AGENTS, val => !val.isProtected);
   if (env.AGENTS_KV) {
     await env.AGENTS_KV.put(`agent:${agent.id}`, JSON.stringify(agent));
   }
@@ -288,17 +472,27 @@ export async function saveAgent(agent: Agent, env: Env): Promise<void> {
 export async function listAgents(env: Env): Promise<Agent[]> {
   if (env.AGENTS_KV) {
     try {
-      const keys = await env.AGENTS_KV.list();
-      const agents: Agent[] = [];
+      const merged = new Map<string, Agent>();
+      for (const starter of STARTER_AGENTS) {
+        merged.set(starter.id, starter);
+      }
+      const keys = await env.AGENTS_KV.list({ prefix: 'agent:' });
       for (const k of keys.keys) {
-        if (k.name.startsWith('agent:')) {
-          const raw = await env.AGENTS_KV.get(k.name);
-          if (raw) agents.push(JSON.parse(raw));
+        if (!k.name.startsWith('agent:')) continue;
+        const raw = await env.AGENTS_KV.get(k.name);
+        if (!raw) continue;
+        try {
+          const parsed: Agent = JSON.parse(raw);
+          if (parsed && parsed.id) {
+            merged.set(parsed.id, parsed);
+          }
+        } catch (parseErr: any) {
+          logStructured('error', 'kv.list_agent_item_corrupt', { reason: parseErr?.message || String(parseErr) });
         }
       }
-      if (agents.length > 0) return agents;
-    } catch (e) {
-      console.warn('KV list failed, using memory', e);
+      return Array.from(merged.values());
+    } catch (e: any) {
+      logStructured('warn', 'kv.list_fallback_memory', { reason: e?.message || String(e) });
     }
   }
   return Array.from(inMemoryAgents.values());
@@ -306,6 +500,13 @@ export async function listAgents(env: Env): Promise<Agent[]> {
 
 export async function deleteAgent(id: string, env: Env): Promise<boolean> {
   inMemoryAgents.delete(id);
+  inMemoryRuns.delete(id);
+  const sessPrefix = `${id}:`;
+  for (const key of inMemorySessions.keys()) {
+    if (key.startsWith(sessPrefix)) {
+      inMemorySessions.delete(key);
+    }
+  }
   if (env.AGENTS_KV) {
     await env.AGENTS_KV.delete(`agent:${id}`);
   }

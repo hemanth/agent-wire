@@ -59,7 +59,7 @@ export const ProblemSolutionSection: React.FC = () => {
                   <div className="w-9 h-9 rounded-xl bg-zinc-100 border border-zinc-200/80 flex items-center justify-center text-zinc-800 shadow-2xs">
                     <Icon className="w-4 h-4 text-zinc-700" aria-hidden="true" />
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-500 font-semibold">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-700 font-semibold">
                     0{idx + 1}
                   </span>
                 </div>
@@ -69,9 +69,9 @@ export const ProblemSolutionSection: React.FC = () => {
                 </h3>
 
                 <div className="space-y-2 text-xs">
-                  <div className="p-3 rounded-xl bg-zinc-50/80 border border-zinc-150 text-zinc-600">
-                    <span className="font-bold text-zinc-400 font-mono text-[10px] block mb-1">THE PROBLEM</span>
-                    <p className="line-clamp-2 leading-relaxed text-zinc-600">{item.problem}</p>
+                  <div className="p-3 rounded-xl bg-zinc-50/80 border border-zinc-150 text-zinc-700">
+                    <span className="font-bold text-zinc-600 font-mono text-[10px] block mb-1">THE PROBLEM</span>
+                    <p className="line-clamp-2 leading-relaxed text-zinc-700">{item.problem}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-white border border-zinc-300 text-zinc-950 shadow-2xs">
                     <span className="font-bold font-mono text-[10px] block mb-1 text-zinc-950">AGENTWIRE FIX</span>

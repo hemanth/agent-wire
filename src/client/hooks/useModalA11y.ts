@@ -5,6 +5,9 @@ interface UseModalA11yOptions {
   onClose: () => void;
 }
 
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function useModalA11y<T extends HTMLElement = HTMLDivElement>({
   isOpen = true,
   onClose
@@ -22,11 +25,35 @@ export function useModalA11y<T extends HTMLElement = HTMLDivElement>({
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
-    // Keydown listener for Escape
+    // Keydown listener for Escape and Tab focus trapping
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = Array.from(modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+          el => !el.hasAttribute('hidden') && el.getClientRects().length > 0
+        );
+        if (focusable.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+
+        if (e.shiftKey) {
+          if (!active || active === first || !modalRef.current.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (!active || active === last || !modalRef.current.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
 
@@ -35,9 +62,7 @@ export function useModalA11y<T extends HTMLElement = HTMLDivElement>({
     // Focus the modal or first focusable element inside
     const timer = setTimeout(() => {
       if (modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
         if (focusable.length > 0) {
           focusable[0]?.focus();
         } else {

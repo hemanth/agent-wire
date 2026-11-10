@@ -11,22 +11,54 @@ interface CodeBlockProps {
   className?: string;
 }
 
+const MAX_HIGHLIGHT_LENGTH = 8192;
+
+function renderTokens(tokens: Array<string | Prism.Token>, keyPrefix = 't'): React.ReactNode {
+  return tokens.map((token, index) => {
+    if (typeof token === 'string') {
+      return token;
+    }
+    const alias = Array.isArray(token.alias) ? token.alias.join(' ') : token.alias || '';
+    const cls = `token ${token.type}${alias ? ` ${alias}` : ''}`;
+    const key = `${keyPrefix}-${index}`;
+    const children = Array.isArray(token.content)
+      ? renderTokens(token.content as Array<string | Prism.Token>, key)
+      : typeof token.content === 'object' && token.content !== null
+      ? renderTokens([token.content as Prism.Token], key)
+      : String(token.content);
+    return (
+      <span key={key} className={cls}>
+        {children}
+      </span>
+    );
+  });
+}
+
 export const CodeBlock: React.FC<CodeBlockProps> = ({
   code,
   language,
   className = ''
 }) => {
-  const highlightedHtml = useMemo(() => {
+  const renderedContent = useMemo(() => {
+    const trimmed = code.trim();
+    if (trimmed.length > MAX_HIGHLIGHT_LENGTH) {
+      return trimmed;
+    }
     const langKey =
       language === 'curl' ? 'bash' : language === 'js' ? 'javascript' : language;
     const grammar = Prism.languages[langKey] || Prism.languages.bash;
-    return Prism.highlight(code.trim(), grammar, langKey);
+    const tokens = Prism.tokenize(trimmed, grammar);
+    return renderTokens(tokens);
   }, [code, language]);
 
   return (
     <pre
-      className={`font-mono leading-relaxed overflow-x-auto ${className}`}
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-    />
+      tabIndex={0}
+      role="region"
+      aria-label={`${language} code snippet`}
+      className={`font-mono leading-relaxed overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded ${className}`}
+    >
+      {renderedContent}
+    </pre>
   );
 };

@@ -43,7 +43,7 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
             <h2 id="section-models-title" className="text-base font-bold text-zinc-950">
               2. OpenRouter Model Fallback Chain & Token Budget
             </h2>
-            <p className="text-xs text-zinc-500">Auto-failover order when primary provider is throttled or down</p>
+            <p className="text-xs text-zinc-600">Auto-failover order when primary provider is throttled or down</p>
           </div>
         </div>
         {!openRouterKey && (
@@ -95,7 +95,7 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] text-zinc-500 font-mono mt-0.5 flex items-center gap-1.5">
+                <div className="text-[11px] text-zinc-600 font-mono mt-0.5 flex items-center gap-1.5">
                   <span>{m.provider} • {m.context}</span>
                   {m.reasoning && (
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-zinc-200/80 text-zinc-800 font-semibold">
@@ -121,13 +121,14 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
       <div className="pt-4 border-t border-zinc-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="text-zinc-600">
           <span className="font-semibold text-zinc-900">Max Output Tokens:</span>{' '}
-          <span className="text-[11px] text-zinc-500">Limits credit reservation to avoid OpenRouter 402 on low balances</span>
+          <span className="text-[11px] text-zinc-600">Limits credit reservation to avoid OpenRouter 402 on low balances</span>
         </div>
         <div className="flex items-center gap-1.5 font-mono" role="group" aria-label="Max token limits">
           {[1024, 2048, 4096].map(limit => (
             <button
               key={limit}
               type="button"
+              aria-pressed={maxTokens === limit}
               onClick={() => setMaxTokens?.(limit)}
               className={`px-3 py-1.5 rounded-full border text-[11px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 maxTokens === limit
@@ -154,6 +155,7 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
               <button
                 key={level}
                 type="button"
+                aria-pressed={reasoningEffort === level}
                 onClick={() => setReasoningEffort?.(level)}
                 className={`px-2.5 py-1 rounded-md border text-[11px] capitalize transition-all ${
                   reasoningEffort === level
@@ -183,6 +185,7 @@ export const ModelSelectorSection: React.FC<ModelSelectorSectionProps> = ({
               <button
                 key={fmt.id}
                 type="button"
+                aria-pressed={responseFormat === fmt.id}
                 onClick={() => setResponseFormat?.(fmt.id)}
                 className={`px-2.5 py-1 rounded-md border text-[11px] transition-all ${
                   responseFormat === fmt.id

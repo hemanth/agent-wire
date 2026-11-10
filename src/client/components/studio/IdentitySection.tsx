@@ -37,14 +37,15 @@ export const IdentitySection: React.FC<IdentitySectionProps> = ({
             <h2 id="section-identity-title" className="text-base font-bold text-zinc-950">
               1. Identity & System Persona
             </h2>
-            <p className="text-xs text-zinc-500">Define agent name, edge slug, and access permissions</p>
+            <p className="text-xs text-zinc-600">Define agent name, edge slug, and access permissions</p>
           </div>
         </div>
 
         {/* Permissions & Visibility Toggle */}
-        <div className="flex items-center bg-zinc-100/90 p-1 rounded-full border border-zinc-200/80 shadow-2xs text-xs font-medium self-start sm:self-auto">
+        <div className="flex items-center bg-zinc-100/90 p-1 rounded-full border border-zinc-200/80 shadow-2xs text-xs font-medium self-start sm:self-auto" role="group" aria-label="Agent visibility">
           <button
             type="button"
+            aria-pressed={visibility === 'public'}
             onClick={() => setVisibility('public')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all ${
               visibility === 'public'
@@ -57,6 +58,7 @@ export const IdentitySection: React.FC<IdentitySectionProps> = ({
           </button>
           <button
             type="button"
+            aria-pressed={visibility === 'private'}
             onClick={() => setVisibility('private')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-all ${
               visibility === 'private'
@@ -120,7 +122,7 @@ export const IdentitySection: React.FC<IdentitySectionProps> = ({
           <label htmlFor="agent-system-prompt" className="block text-xs font-mono text-zinc-700 font-medium">
             System Instructions (Persona & Execution Guardrails) <span className="text-rose-500" aria-hidden="true">*</span>
           </label>
-          <span className="text-[11px] font-mono text-zinc-500">
+          <span className="text-[11px] font-mono text-zinc-600">
             {systemPrompt.length} chars
           </span>
         </div>

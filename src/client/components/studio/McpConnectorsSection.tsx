@@ -8,7 +8,7 @@ interface McpConnectorsSectionProps {
   mcps: McpConnector[];
   onAddMcp: (connector: McpConnector) => void;
   onRemoveMcp: (id: string) => void;
-  onProbeMcp: (id: string, url: string) => Promise<void>;
+  onProbeMcp: (id: string, url: string, headers?: Record<string, string>) => Promise<void>;
   probingMcpId: string | null;
 }
 
@@ -22,17 +22,26 @@ export const McpConnectorsSection: React.FC<McpConnectorsSectionProps> = ({
   const [newMcpUrl, setNewMcpUrl] = useState('');
   const [newMcpName, setNewMcpName] = useState('');
   const [newMcpToken, setNewMcpToken] = useState('');
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const handleAddCustom = () => {
     if (!newMcpUrl.trim()) return;
+    setUrlError(null);
     try {
       const parsed = new URL(newMcpUrl.trim());
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        setUrlError('Please enter an http:// or https:// URL.');
+        return;
+      }
+      const headers = newMcpToken.trim()
+        ? { Authorization: newMcpToken.trim().startsWith('Bearer ') ? newMcpToken.trim() : `Bearer ${newMcpToken.trim()}` }
+        : undefined;
       const connector: McpConnector = {
         id: `mcp_${Date.now()}`,
         name: newMcpName.trim() || `MCP (${parsed.hostname})`,
         url: newMcpUrl.trim(),
         type: newMcpUrl.includes('/sse') ? 'sse' : 'http',
-        headers: newMcpToken.trim() ? { 'Authorization': newMcpToken.trim().startsWith('Bearer ') ? newMcpToken.trim() : `Bearer ${newMcpToken.trim()}` } : undefined,
+        headers,
         status: 'unknown',
         tools: []
       };
@@ -40,16 +49,16 @@ export const McpConnectorsSection: React.FC<McpConnectorsSectionProps> = ({
       setNewMcpUrl('');
       setNewMcpName('');
       setNewMcpToken('');
-      onProbeMcp(connector.id, connector.url);
+      onProbeMcp(connector.id, connector.url, connector.headers);
     } catch {
-      alert('Please enter a valid URL (including https:// or http://)');
+      setUrlError('Please enter a valid URL (including https:// or http://).');
     }
   };
 
   const handleAddPreset = (preset: McpConnector) => {
     if (!mcps.some(m => m.id === preset.id || m.url === preset.url)) {
       onAddMcp(preset);
-      onProbeMcp(preset.id, preset.url);
+      onProbeMcp(preset.id, preset.url, preset.headers);
     }
   };
 
@@ -64,7 +73,7 @@ export const McpConnectorsSection: React.FC<McpConnectorsSectionProps> = ({
             <h2 id="section-mcp-title" className="text-base font-bold text-zinc-950">
               3. Connectors to Model Context Protocol (MCP) Servers
             </h2>
-            <p className="text-xs text-zinc-500">Live SSE & HTTP tool protocol endpoints</p>
+            <p className="text-xs text-zinc-600">Live SSE & HTTP tool protocol endpoints</p>
           </div>
         </div>
         <span className="text-xs text-zinc-700 font-mono bg-zinc-100 px-3 py-1 rounded-full border border-zinc-200 font-semibold">
@@ -78,7 +87,7 @@ export const McpConnectorsSection: React.FC<McpConnectorsSectionProps> = ({
 
       {/* Quick Presets */}
       <div className="flex flex-wrap items-center gap-2 pt-1" role="group" aria-label="MCP server presets">
-        <span className="text-xs font-mono text-zinc-500">Presets:</span>
+        <span className="text-xs font-mono text-zinc-600">Presets:</span>
         {PRESET_MCPS.map(p => (
           <button
             key={p.id}
@@ -152,6 +161,11 @@ export const McpConnectorsSection: React.FC<McpConnectorsSectionProps> = ({
             </button>
           </div>
         </div>
+        {urlError && (
+          <div role="alert" className="mt-2 text-xs font-mono text-rose-700">
+            {urlError}
+          </div>
+        )}
       </div>
     </section>
   );

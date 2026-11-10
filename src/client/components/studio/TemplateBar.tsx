@@ -8,8 +8,8 @@ interface TemplateBarProps {
 export const TemplateBar: React.FC<TemplateBarProps> = ({ onSelectTemplate }) => {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Template quick starters">
-      <span className="text-xs font-mono text-zinc-500 flex items-center gap-1.5">
-        <LayoutTemplate className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />
+      <span className="text-xs font-mono text-zinc-600 flex items-center gap-1.5">
+        <LayoutTemplate className="w-3.5 h-3.5 text-zinc-500" aria-hidden="true" />
         Presets:
       </span>
       <button

@@ -4,23 +4,31 @@ import { Activity, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronRight, 
 
 interface RunHistoryViewProps {
   agentId: string;
+  wireApiKey?: string | null;
 }
 
-export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ agentId }) => {
+export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ agentId, wireApiKey }) => {
   const [runs, setRuns] = useState<AgentRunRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
   const fetchRuns = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/agents/${agentId}/runs`);
+      const headers: Record<string, string> = {};
+      if (wireApiKey) headers['X-AgentWire-Key'] = wireApiKey;
+      const res = await fetch(`/api/agents/${agentId}/runs`, { headers });
       if (res.ok) {
         const data = await res.json();
         setRuns(data.runs || []);
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        setError(errBody.error || `HTTP ${res.status}`);
       }
-    } catch (e) {
-      console.error('Failed to load run history', e);
+    } catch {
+      // Non-fatal: history stays empty on transient network error
     } finally {
       setLoading(false);
     }
@@ -28,7 +36,7 @@ export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ agentId }) => {
 
   useEffect(() => {
     fetchRuns();
-  }, [agentId]);
+  }, [agentId, wireApiKey]);
 
   return (
     <div className="space-y-4">
@@ -50,14 +58,18 @@ export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ agentId }) => {
         </button>
       </div>
 
-      {loading && runs.length === 0 ? (
-        <div className="py-8 text-center text-xs font-mono text-zinc-500">
+      {error ? (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-mono text-rose-900">
+          {error}
+        </div>
+      ) : loading && runs.length === 0 ? (
+        <div className="py-8 text-center text-xs font-mono text-zinc-600">
           Loading execution traces from edge KV...
         </div>
       ) : runs.length === 0 ? (
         <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-6 text-center space-y-1.5">
           <p className="text-xs font-mono text-zinc-700 font-medium">No recorded runs yet.</p>
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-[11px] text-zinc-600">
             Execute a task via the Sandbox tab or cURL to start capturing telemetry.
           </p>
         </div>
@@ -73,8 +85,14 @@ export const RunHistoryView: React.FC<RunHistoryViewProps> = ({ agentId }) => {
                 <div
                   role="button"
                   tabIndex={0}
+                  aria-expanded={isExpanded}
                   onClick={() => setExpandedRunId(isExpanded ? null : run.runId)}
-                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setExpandedRunId(isExpanded ? null : run.runId)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setExpandedRunId(isExpanded ? null : run.runId);
+                    }
+                  }}
                   className="flex items-center justify-between gap-3 cursor-pointer select-none"
                 >
                   <div className="flex items-center gap-2 min-w-0">

@@ -5,7 +5,7 @@ import { McpConnector } from '../../../types.ts';
 interface McpConnectorCardProps {
   mcp: McpConnector;
   isProbing: boolean;
-  onProbe: (id: string, url: string) => Promise<void>;
+  onProbe: (id: string, url: string, headers?: Record<string, string>) => Promise<void>;
   onRemove: (id: string) => void;
 }
 
@@ -27,6 +27,7 @@ export const McpConnectorCard: React.FC<McpConnectorCardProps> = ({
             {mcp.type}
           </span>
           <span
+            role="img"
             className={`w-2 h-2 rounded-full ${
               mcp.status === 'connected'
                 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
@@ -38,7 +39,7 @@ export const McpConnectorCard: React.FC<McpConnectorCardProps> = ({
             aria-label={`Status: ${mcp.status}`}
           />
         </div>
-        <div className="font-mono text-xs text-zinc-500 truncate mt-0.5">
+        <div className="font-mono text-xs text-zinc-600 truncate mt-0.5">
           {mcp.url}
         </div>
 
@@ -67,7 +68,7 @@ export const McpConnectorCard: React.FC<McpConnectorCardProps> = ({
       <div className="flex items-center gap-2 self-end sm:self-center">
         <button
           type="button"
-          onClick={() => onProbe(mcp.id, mcp.url)}
+          onClick={() => onProbe(mcp.id, mcp.url, mcp.headers)}
           disabled={isProbing}
           aria-busy={isProbing}
           aria-label={`Test ping ${mcp.name}`}

@@ -11,6 +11,9 @@ import type {
 } from './types.ts';
 import {
   type Env,
+  cryptoRandomHex,
+  getClientIp,
+  extractWireKey,
   checkRateLimit,
   validateApiKey,
   getOrGenerateTrace,
@@ -20,37 +23,278 @@ import {
   saveAgent,
   saveRunRecord
 } from './store.ts';
+import { logStructured, scrubSecrets } from './telemetry.ts';
+import { evaluateFeatureFlags } from './flags.ts';
 
-// SSRF Protection: Disallow private, loopback, and cloud metadata IP ranges for user-supplied MCP URLs
+const ALLOWED_REMOTE_PORTS = new Set(['', '80', '443', '8080', '8443']);
+const FORBIDDEN_MCP_HEADERS = new Set([
+  'host',
+  'content-length',
+  'transfer-encoding',
+  'connection',
+  'keep-alive',
+  'upgrade',
+  'te',
+  'trailer',
+  'cookie'
+]);
+
+export function isUnsafeHostOrIp(rawHost: string): boolean {
+  const host = rawHost.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  if (!host) return true;
+
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host === 'metadata.google.internal' ||
+    host === 'metadata.goog' ||
+    host.endsWith('.internal') ||
+    host.endsWith('.local') ||
+    host.endsWith('.home.arpa') ||
+    host.endsWith('.nip.io') ||
+    host.endsWith('.sslip.io') ||
+    host.endsWith('.xip.io') ||
+    host.endsWith('.traefik.me') ||
+    host.endsWith('.localtest.me') ||
+    host.endsWith('.lvh.me')
+  ) {
+    return true;
+  }
+
+  // Block decimal/hex/octal IPv4 encodings
+  if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/i.test(host) || /^0\d+\./.test(host)) {
+    return true;
+  }
+
+  // Block private, loopback, zero, link-local, CGNAT (incl. 100.100.100.200), benchmark, and multicast IPv4
+  if (
+    /^0\./.test(host) ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+    /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
+    /^198\.1[89]\./.test(host) ||
+    /^(22[4-9]|23\d|24\d|25[0-5])\./.test(host)
+  ) {
+    return true;
+  }
+
+  // Block IPv6 unspecified, loopback, IPv4-mapped/compatible (::ffff:7f00:1, 0:0:0:0:0:ffff:...), ULA, link-local, multicast
+  if (
+    host === '::' ||
+    host === '::1' ||
+    host.startsWith('::') ||
+    /^0+:0+:0+:0+:0+:(0+|ffff):/i.test(host) ||
+    /^0+:0+:0+:0+:0+:0+:0+:[01]$/i.test(host) ||
+    /^(fc|fd)[0-9a-f]{2}:/i.test(host) ||
+    /^fe[89ab][0-9a-f]:/i.test(host) ||
+    /^ff[0-9a-f]{2}:/i.test(host)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+// SSRF Protection: Disallow private, loopback, IPv6 unique-local/link-local, cloud metadata, and non-web ports
 export function isSafeRemoteUrl(rawUrl: string): { safe: boolean; reason?: string } {
   try {
     const parsed = new URL(rawUrl);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return { safe: false, reason: 'Only http:// and https:// MCP URLs are permitted.' };
     }
-    const host = parsed.hostname.toLowerCase();
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host === '::1' ||
-      host === '[::1]' ||
-      host.endsWith('.internal') ||
-      host.endsWith('.local') ||
-      /^169\.254\./.test(host) ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-    ) {
+    if (parsed.username || parsed.password) {
+      return { safe: false, reason: 'SSRF guard blocked credentials in MCP URL.' };
+    }
+    const rawHost = parsed.hostname.toLowerCase();
+    if (isUnsafeHostOrIp(rawHost)) {
       return {
         safe: false,
-        reason: `SSRF guard blocked private/loopback host "${host}". Remote MCP connectors must use public HTTPS endpoints.`
+        reason: `SSRF guard blocked private/loopback host "${rawHost}". Remote MCP connectors must use public HTTPS endpoints.`
+      };
+    }
+    if (!ALLOWED_REMOTE_PORTS.has(parsed.port)) {
+      return {
+        safe: false,
+        reason: `SSRF guard blocked non-standard port "${parsed.port}". Allowed ports: 80, 443, 8080, 8443.`
       };
     }
     return { safe: true };
   } catch {
     return { safe: false, reason: 'Invalid URL format.' };
   }
+}
+
+async function assertSafeResolvedAddresses(rawUrl: string): Promise<void> {
+  const parsed = new URL(rawUrl);
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  try {
+    const dnsMod = await import('node:dns/promises');
+    if (typeof dnsMod.lookup === 'function') {
+      const records = await dnsMod.lookup(host, { all: true });
+      for (const rec of records) {
+        if (isUnsafeHostOrIp(rec.address)) {
+          throw new Error(
+            `SSRF guard blocked DNS resolution of "${host}" to private/loopback address.`
+          );
+        }
+      }
+    }
+  } catch (err: any) {
+    if (err?.message && String(err.message).includes('SSRF guard blocked')) {
+      throw err;
+    }
+    // Ignore unsupported node:dns in pure edge isolates or transient offline NXDOMAIN (fetch will handle network errors)
+  }
+}
+
+function sanitizeMcpHeaders(headers?: Record<string, unknown>): Record<string, string> {
+  const clean: Record<string, string> = {};
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return clean;
+  for (const [k, v] of Object.entries(headers)) {
+    if (typeof k !== 'string' || typeof v !== 'string') continue;
+    const trimmedKey = k.trim();
+    if (!trimmedKey || trimmedKey.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(trimmedKey)) continue;
+    if (FORBIDDEN_MCP_HEADERS.has(trimmedKey.toLowerCase())) continue;
+    if (/[\r\n]/.test(v) || v.length > 4096) continue;
+    clean[trimmedKey] = v;
+  }
+  return clean;
+}
+
+async function readBoundedRpcResponse(res: Response, maxBytes = 1_048_576): Promise<any> {
+  const reader = res.body?.getReader();
+  let text = '';
+  if (reader) {
+    const decoder = new TextDecoder();
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel().catch(() => {});
+          throw new Error('Remote MCP response exceeded 1 MB limit.');
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+    }
+    text += decoder.decode();
+  } else {
+    text = await res.text();
+    if (text.length > maxBytes) {
+      throw new Error('Remote MCP response exceeded 1 MB limit.');
+    }
+  }
+
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  const trimmed = text.trim();
+  if (contentType.includes('text/event-stream') || trimmed.startsWith('event:') || trimmed.startsWith('data:')) {
+    const dataLines = trimmed
+      .split(/\r?\n/)
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trim())
+      .filter(payload => payload && payload !== '[DONE]');
+    for (let i = dataLines.length - 1; i >= 0; i--) {
+      try {
+        return JSON.parse(dataLines[i]);
+      } catch {}
+    }
+    throw new Error('Remote MCP SSE stream did not contain a valid JSON-RPC payload.');
+  }
+
+  return JSON.parse(trimmed);
+}
+
+export function validateAgentInput(body: any): { valid: boolean; error?: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { valid: false, error: 'Request body must be a JSON object.' };
+  }
+  if (body.name !== undefined && (typeof body.name !== 'string' || body.name.trim().length === 0 || body.name.length > 120)) {
+    return { valid: false, error: 'Agent "name" must be a non-empty string up to 120 characters.' };
+  }
+  if (body.slug !== undefined && (typeof body.slug !== 'string' || body.slug.length > 80 || !/^[a-zA-Z0-9_-]*$/.test(body.slug))) {
+    return { valid: false, error: 'Agent "slug" must be up to 80 alphanumeric/hyphen/underscore characters.' };
+  }
+  if (body.tagline !== undefined && (typeof body.tagline !== 'string' || body.tagline.length > 300)) {
+    return { valid: false, error: 'Agent "tagline" must be a string up to 300 characters.' };
+  }
+  if (body.systemPrompt !== undefined && (typeof body.systemPrompt !== 'string' || body.systemPrompt.length > 32000)) {
+    return { valid: false, error: 'Agent "systemPrompt" must be a string up to 32,000 characters.' };
+  }
+  if (body.temperature !== undefined && (typeof body.temperature !== 'number' || Number.isNaN(body.temperature) || body.temperature < 0 || body.temperature > 2)) {
+    return { valid: false, error: 'Agent "temperature" must be a number between 0 and 2.' };
+  }
+  if (body.maxTokens !== undefined && (typeof body.maxTokens !== 'number' || !Number.isInteger(body.maxTokens) || body.maxTokens < 1 || body.maxTokens > 32768)) {
+    return { valid: false, error: 'Agent "maxTokens" must be an integer between 1 and 32,768.' };
+  }
+  if (body.reasoningEffort !== undefined && !['none', 'low', 'medium', 'high'].includes(body.reasoningEffort)) {
+    return { valid: false, error: 'Agent "reasoningEffort" must be one of: none, low, medium, high.' };
+  }
+  if (body.responseFormat !== undefined && !['text', 'json_object', 'json_schema'].includes(body.responseFormat)) {
+    return { valid: false, error: 'Agent "responseFormat" must be one of: text, json_object, json_schema.' };
+  }
+  if (body.outputSchema !== undefined && body.outputSchema !== null) {
+    if (typeof body.outputSchema !== 'object' || Array.isArray(body.outputSchema) || JSON.stringify(body.outputSchema).length > 16384) {
+      return { valid: false, error: 'Agent "outputSchema" must be a JSON Schema object up to 16 KB.' };
+    }
+  }
+  if (body.guardrails !== undefined) {
+    if (!body.guardrails || typeof body.guardrails !== 'object' || Array.isArray(body.guardrails)) {
+      return { valid: false, error: 'Agent "guardrails" must be an object.' };
+    }
+    if (
+      body.guardrails.maxToolSteps !== undefined &&
+      (typeof body.guardrails.maxToolSteps !== 'number' || body.guardrails.maxToolSteps < 1 || body.guardrails.maxToolSteps > 5)
+    ) {
+      return { valid: false, error: 'Guardrail "maxToolSteps" must be between 1 and 5.' };
+    }
+  }
+  if (body.models !== undefined) {
+    if (!Array.isArray(body.models) || body.models.length > 10 || body.models.some((m: unknown) => typeof m !== 'string' || m.length > 120)) {
+      return { valid: false, error: 'Agent "models" must be an array of up to 10 model ID strings.' };
+    }
+  }
+  if (body.subAgents !== undefined) {
+    if (
+      !Array.isArray(body.subAgents) ||
+      body.subAgents.length > 5 ||
+      body.subAgents.some((id: unknown) => typeof id !== 'string' || !/^[a-zA-Z0-9_/-]{1,80}$/.test(id))
+    ) {
+      return { valid: false, error: 'Agent "subAgents" must be an array of up to 5 valid agent IDs or slugs.' };
+    }
+  }
+  if (body.skills !== undefined) {
+    if (!Array.isArray(body.skills) || body.skills.length > 25) {
+      return { valid: false, error: 'Agent "skills" cannot exceed 25 entries.' };
+    }
+    for (const s of body.skills) {
+      if (!s || typeof s !== 'object' || typeof s.content !== 'string' || s.content.length > 16000) {
+        return { valid: false, error: 'Each skill must be an object with a "content" string up to 16,000 characters.' };
+      }
+    }
+  }
+  if (body.mcps !== undefined) {
+    if (!Array.isArray(body.mcps) || body.mcps.length > 15) {
+      return { valid: false, error: 'Agent "mcps" cannot exceed 15 MCP connectors.' };
+    }
+    for (const mcp of body.mcps) {
+      if (!mcp || typeof mcp.url !== 'string') {
+        return { valid: false, error: 'Each MCP connector must include a valid "url" string.' };
+      }
+      const check = isSafeRemoteUrl(mcp.url);
+      if (!check.safe) {
+        return { valid: false, error: check.reason || 'Unsafe MCP URL.' };
+      }
+      if (mcp.headers !== undefined && (typeof mcp.headers !== 'object' || Array.isArray(mcp.headers))) {
+        return { valid: false, error: 'MCP "headers" must be a key-value object.' };
+      }
+    }
+  }
+  return { valid: true };
 }
 
 // Runtime Guardrail Helpers: Prompt-Injection Detection & PII Redaction
@@ -64,7 +308,7 @@ export function evaluateGuardrails(
   rawTask: string,
   guardrails?: { blockPromptInjection?: boolean; redactPii?: boolean }
 ): { sanitizedTask: string; triggered: string[]; injectionDetected: boolean } {
-  let sanitizedTask = rawTask;
+  let sanitizedTask = String(rawTask ?? '');
   const triggered: string[] = [];
   let injectionDetected = false;
 
@@ -85,7 +329,7 @@ export function evaluateGuardrails(
   if (guardrails?.redactPii !== false) {
     const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
     const ssnPattern = /\b\d{3}-\d{2}-\d{4}\b/g;
-    const secretKeyPattern = /\b(sk-or-v1-[a-zA-Z0-9]{16,}|ghp_[a-zA-Z0-9]{20,})\b/g;
+    const secretKeyPattern = /\b(sk-or-v1-[a-zA-Z0-9_-]{12,}|wire_live_[a-zA-Z0-9_-]{8,}|ghp_[a-zA-Z0-9]{20,})\b/g;
     if (emailPattern.test(sanitizedTask)) {
       triggered.push('pii_redacted:email');
       emailPattern.lastIndex = 0;
@@ -104,6 +348,48 @@ export function evaluateGuardrails(
   return { sanitizedTask, triggered, injectionDetected };
 }
 
+function coerceContentToString(val: unknown, maxLen = 32000): string {
+  if (typeof val === 'string') return val.slice(0, maxLen);
+  if (Array.isArray(val)) {
+    const joined = val
+      .map(part => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object' && typeof (part as any).text === 'string') {
+          return (part as any).text;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+    return joined.slice(0, maxLen);
+  }
+  if (typeof val === 'number' || typeof val === 'boolean') {
+    return String(val);
+  }
+  return '';
+}
+
+function sanitizePlainObject(
+  input: unknown,
+  maxSerializedChars = 16384
+): Record<string, unknown> | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    if (k.length > 128) continue;
+    out[k] = v;
+  }
+  try {
+    if (JSON.stringify(out).length > maxSerializedChars) {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return out;
+}
+
 // Fetch tool list from an external MCP server (supports HTTP JSON-RPC and SSE)
 export async function probeMcpServer(
   url: string,
@@ -115,10 +401,11 @@ export async function probeMcpServer(
     throw new Error(urlCheck.reason);
   }
   try {
+    await assertSafeResolvedAddresses(url);
     const reqHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
-      ...headers
+      ...sanitizeMcpHeaders(headers)
     };
     if (traceparent) {
       reqHeaders['traceparent'] = traceparent;
@@ -127,6 +414,7 @@ export async function probeMcpServer(
     const res = await fetch(url, {
       method: 'POST',
       headers: reqHeaders,
+      redirect: 'error',
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
@@ -137,20 +425,24 @@ export async function probeMcpServer(
     });
 
     if (!res.ok) {
-      throw new Error(`MCP returned HTTP ${res.status}: ${res.statusText}`);
+      throw new Error(`MCP returned HTTP ${res.status}`);
     }
 
-    const data: any = await res.json();
-    if (data.result && Array.isArray(data.result.tools)) {
+    const data: any = await readBoundedRpcResponse(res);
+    if (data?.result && Array.isArray(data.result.tools)) {
       return data.result.tools;
     }
-    if (data.tools && Array.isArray(data.tools)) {
+    if (data && Array.isArray(data.tools)) {
       return data.tools;
     }
     return [];
   } catch (err: any) {
-    console.warn(`Probe failed for MCP ${url}:`, err.message);
-    throw err;
+    const rawMsg = scrubSecrets(err?.message || String(err));
+    logStructured('warn', 'mcp.probe_failed', { provider: url, reason: rawMsg });
+    if (rawMsg.includes('SSRF guard blocked') || rawMsg.startsWith('MCP returned HTTP') || rawMsg.includes('Only http')) {
+      throw new Error(rawMsg);
+    }
+    throw new Error('Unable to reach or parse remote MCP server.');
   }
 }
 
@@ -167,9 +459,12 @@ export async function executeMcpTool(
     return { error: urlCheck.reason };
   }
   try {
+    await assertSafeResolvedAddresses(mcpUrl);
+    const cleanHeaders = sanitizeMcpHeaders(headers);
     const reqHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...headers
+      Accept: 'application/json, text/event-stream',
+      ...cleanHeaders
     };
     if (traceparent) {
       reqHeaders['traceparent'] = traceparent;
@@ -178,13 +473,14 @@ export async function executeMcpTool(
     const res = await fetch(mcpUrl, {
       method: 'POST',
       headers: reqHeaders,
+      redirect: 'error',
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: Date.now(),
         method: 'tools/call',
         params: {
           name: toolName,
-          arguments: toolArgs || {}
+          arguments: toolArgs && typeof toolArgs === 'object' ? toolArgs : {}
         }
       }),
       signal: AbortSignal.timeout(10000)
@@ -192,7 +488,7 @@ export async function executeMcpTool(
 
     if (!res.ok) {
       if (res.status === 401) {
-        if (mcpUrl.includes('stitch.googleapis.com') && !headers['Authorization']) {
+        if (mcpUrl.includes('stitch.googleapis.com') && !cleanHeaders['Authorization']) {
           return {
             status: 'sandbox_fallback',
             source: 'Stitch MCP (Sandbox Mode - HTTP 401 unauthenticated)',
@@ -220,12 +516,12 @@ export async function executeMcpTool(
       return { error: `MCP tool execution failed: HTTP ${res.status}` };
     }
 
-    const data: any = await res.json();
-    if (data.result) return data.result;
-    if (data.content) return data.content;
+    const data: any = await readBoundedRpcResponse(res);
+    if (data?.result) return data.result;
+    if (data?.content) return data.content;
     return data;
   } catch (err: any) {
-    return { error: `Failed to call remote tool ${toolName}: ${err.message}` };
+    return { error: `Failed to call remote tool ${toolName}: ${scrubSecrets(err?.message || 'Remote MCP unreachable')}` };
   }
 }
 
@@ -297,6 +593,9 @@ function buildSandboxSimulationOutput(params: {
     finalResult: `[AgentWire Sandbox Simulation — No OpenRouter Key provided]\n\nExecution Summary: I am ${agent.name}.\nSystem persona and ${enabledSkills.length} skills loaded successfully.${guardrailNote}${subAgentNote}\n\nConnected MCP tools:\n${toolsSummary}\n\nTask received: "${task}".\nTo enable full multi-model live generation, connect your key via "Sign in with OpenRouter" or supply -H "Authorization: Bearer <key>".`
   };
 }
+
+let deadEnvOpenRouterKey: { key: string; until: number } | null = null;
+
 export async function executeAgentCore(
   agent: Agent,
   payload: RunAgentRequest,
@@ -308,14 +607,15 @@ export async function executeAgentCore(
   const startTime = Date.now();
   const url = new URL(request.url);
 
-  // Permissions check: Rate Limiting
-  const clientIp = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '127.0.0.1';
+  // Authenticate caller API key BEFORE rate-limiting so random unverified Bearer headers cannot bypass quotas
+  const clientIp = getClientIp(request);
   const authHeader = request.headers.get('Authorization') || '';
-  const bearerKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  const customWireKey = request.headers.get('X-AgentWire-Key') || '';
+  const bearerKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const wireKeyCandidate = extractWireKey(request);
+  const validWireKey = wireKeyCandidate ? await validateApiKey(wireKeyCandidate, env) : null;
 
-  const rateLimitKey = bearerKey || clientIp;
-  const rateCheck = checkRateLimit(rateLimitKey, 60, 60000);
+  const rateLimitSubject = validWireKey ? `key:${validWireKey.id}` : `ip:${clientIp}`;
+  const rateCheck = depth === 0 ? checkRateLimit(rateLimitSubject, 60, 60000) : { allowed: true, remaining: 60, resetAfterSec: 60 };
   if (!rateCheck.allowed) {
     return {
       status: 429,
@@ -330,40 +630,79 @@ export async function executeAgentCore(
     };
   }
 
-  // Permissions check: Private Agent Access Guard
-  if (agent.visibility === 'private') {
-    const wireKey = bearerKey.startsWith('wire_live_') ? bearerKey : customWireKey;
-    const validKey = await validateApiKey(wireKey, env);
-    if (!validKey) {
-      return {
-        status: 401,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        body: {
-          error: 'Unauthorized: This agent is private and requires a valid AgentWire API key (wire_live_...).'
-        }
-      };
+  // Permissions check: Private Agent Access Guard (enforced across direct & delegated calls)
+  if (agent.visibility === 'private' && !validWireKey) {
+    return {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      body: {
+        error: 'Unauthorized: This agent is private and requires a valid AgentWire API key (wire_live_...).'
+      }
+    };
+  }
+
+  // Observability: W3C Distributed Tracing & Cryptographically Random Run ID
+  const { traceId, traceparent } = getOrGenerateTrace(request);
+  const runId = `run_${Date.now()}_${cryptoRandomHex(4)}`;
+  const flags = evaluateFeatureFlags(env, rateLimitSubject).values;
+
+  const explicitTaskInput =
+    coerceContentToString(payload.input) ||
+    coerceContentToString(payload.task) ||
+    coerceContentToString(payload.prompt);
+
+  const rawMessages = Array.isArray(payload.messages) ? payload.messages.slice(-40) : [];
+  const safeCallerMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  for (const m of rawMessages) {
+    if (!m || typeof m !== 'object') continue;
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    const text = coerceContentToString(m.content);
+    if (text) {
+      safeCallerMessages.push({ role: m.role, content: text });
     }
   }
 
-  // Observability: W3C Distributed Tracing & Run ID
-  const { traceId, traceparent } = getOrGenerateTrace(request);
-  const runId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
+  const lastCallerMsg =
+    safeCallerMessages.length > 0 ? safeCallerMessages[safeCallerMessages.length - 1].content : '';
   const rawTask =
-    payload.input ||
-    payload.task ||
-    payload.prompt ||
-    (payload.messages && payload.messages.length > 0 ? payload.messages[payload.messages.length - 1].content : '') ||
-    'Hello! Report your capabilities and attached tools.';
+    explicitTaskInput || lastCallerMsg || 'Hello! Report your capabilities and attached tools.';
 
   const steps: ToolExecutionStep[] = [];
   const toolsUsed: string[] = [];
   const subAgentsCalled: string[] = [];
+  const guardrailsTriggered: string[] = [];
 
-  // Runtime Guardrails Check
-  const guardrailCheck = evaluateGuardrails(rawTask, agent.guardrails);
-  const task = guardrailCheck.sanitizedTask;
-  const guardrailsTriggered = guardrailCheck.triggered;
+  const applyGuardrailPass = (text: string): string => {
+    if (!flags.strictGuardrails) return text;
+    const check = evaluateGuardrails(text, agent.guardrails);
+    for (const trig of check.triggered) {
+      if (!guardrailsTriggered.includes(trig)) {
+        guardrailsTriggered.push(trig);
+      }
+    }
+    return check.sanitizedTask;
+  };
+
+  const task = applyGuardrailPass(rawTask);
+  const sanitizedCallerMessages = safeCallerMessages.map(m =>
+    m.role === 'user' ? { role: m.role, content: applyGuardrailPass(m.content) } : m
+  );
+
+  let safeMemoryPatch = sanitizePlainObject(payload.memory);
+  if (safeMemoryPatch && flags.strictGuardrails) {
+    const scrubbedMem = applyGuardrailPass(JSON.stringify(safeMemoryPatch));
+    try {
+      safeMemoryPatch = JSON.parse(scrubbedMem);
+    } catch {}
+  }
+
+  let safeCallContext = sanitizePlainObject(payload.context);
+  if (safeCallContext && flags.strictGuardrails) {
+    const scrubbedCtx = applyGuardrailPass(JSON.stringify(safeCallContext));
+    try {
+      safeCallContext = JSON.parse(scrubbedCtx);
+    } catch {}
+  }
 
   if (guardrailsTriggered.length > 0) {
     steps.push({
@@ -376,11 +715,15 @@ export async function executeAgentCore(
   }
 
   // Session, Memory & Context resolution
-  const sessionId =
+  const candidateSessionId =
     payload.sessionId ||
     request.headers.get('X-Session-ID') ||
     request.headers.get('X-AgentWire-Session-Id') ||
     undefined;
+  const sessionId =
+    typeof candidateSessionId === 'string' && /^[a-zA-Z0-9_:-]{1,128}$/.test(candidateSessionId)
+      ? candidateSessionId
+      : undefined;
 
   let session = sessionId ? await getSession(agent.id, sessionId, env) : null;
   if (sessionId) {
@@ -391,22 +734,23 @@ export async function executeAgentCore(
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         messages: [],
-        memory: payload.memory || {},
+        memory: safeMemoryPatch || {},
         runsCount: 0
       };
-    } else if (payload.memory) {
-      session.memory = { ...session.memory, ...payload.memory };
+    } else if (safeMemoryPatch) {
+      const merged = sanitizePlainObject({ ...session.memory, ...safeMemoryPatch });
+      if (merged) session.memory = merged;
     }
   }
 
   // Step 1: Ingest Skills, Memory, Context and Persona into System Prompt
   const step1Start = Date.now();
-  let fullSystemPrompt = agent.systemPrompt.trim();
-  const enabledSkills = (agent.skills || []).filter(s => s.enabled);
+  let fullSystemPrompt = (agent.systemPrompt || '').trim();
+  const enabledSkills = (agent.skills || []).filter(s => s && s.enabled !== false);
   if (enabledSkills.length > 0) {
     fullSystemPrompt += '\n\n=== ATTACHED AGENT SKILLS ===\n';
     for (const skill of enabledSkills) {
-      fullSystemPrompt += `\n--- Skill: ${skill.name} ---\n${skill.content}\n`;
+      fullSystemPrompt += `\n--- Skill: ${skill.name || skill.id} ---\n${skill.content}\n`;
     }
   }
 
@@ -414,12 +758,16 @@ export async function executeAgentCore(
     fullSystemPrompt += '\n\n=== AGENT WORKING MEMORY (PERSISTENT STATE) ===\n' + JSON.stringify(session.memory, null, 2);
   }
 
-  if (payload.context && Object.keys(payload.context).length > 0) {
-    fullSystemPrompt += '\n\n=== CALL-LEVEL CONTEXT ===\n' + JSON.stringify(payload.context, null, 2);
+  if (safeCallContext && Object.keys(safeCallContext).length > 0) {
+    fullSystemPrompt += '\n\n=== CALL-LEVEL CONTEXT ===\n' + JSON.stringify(safeCallContext, null, 2);
   }
 
-  const effectiveReasoningEffort = payload.reasoningEffort || agent.reasoningEffort || 'medium';
-  const effectiveResponseFormat = payload.responseFormat || agent.responseFormat || 'text';
+  const rawEffort = payload.reasoningEffort || agent.reasoningEffort || 'medium';
+  const effectiveReasoningEffort: 'none' | 'low' | 'medium' | 'high' =
+    ['none', 'low', 'medium', 'high'].includes(rawEffort) ? rawEffort : 'medium';
+  const rawFormat = payload.responseFormat || agent.responseFormat || 'text';
+  const effectiveResponseFormat: 'text' | 'json_object' | 'json_schema' =
+    ['text', 'json_object', 'json_schema'].includes(rawFormat) ? rawFormat : 'text';
 
   steps.push({
     step: steps.length + 1,
@@ -437,16 +785,17 @@ export async function executeAgentCore(
     function: { name: string; description: string; parameters: Record<string, unknown> };
   }> = [];
 
-  const requestMcpAuth =
+  const rawMcpAuth =
     request.headers.get('X-MCP-Authorization') ||
     request.headers.get('X-MCP-Token') ||
-    (payload as any).mcp_token ||
-    (payload as any).mcpToken ||
+    (typeof (payload as any).mcp_token === 'string' ? (payload as any).mcp_token : '') ||
+    (typeof (payload as any).mcpToken === 'string' ? (payload as any).mcpToken : '') ||
     '';
+  const requestMcpAuth = rawMcpAuth.replace(/[\r\n]/g, '').slice(0, 2048);
 
-  for (const mcp of agent.mcps || []) {
+  for (const mcp of flags.mcpLiveExecution ? agent.mcps || [] : []) {
     const effectiveHeaders: Record<string, string> = {
-      ...(mcp.headers || {}),
+      ...sanitizeMcpHeaders(mcp.headers),
       ...(requestMcpAuth ? { Authorization: requestMcpAuth.startsWith('Bearer ') ? requestMcpAuth : `Bearer ${requestMcpAuth}` } : {})
     };
 
@@ -454,8 +803,12 @@ export async function executeAgentCore(
     if (tools.length === 0) {
       try {
         tools = await probeMcpServer(mcp.url, effectiveHeaders, traceparent);
-      } catch (e) {
-        console.warn(`Could not probe MCP ${mcp.name}:`, e);
+      } catch (e: any) {
+        logStructured('warn', 'mcp.runtime_probe_failed', {
+          provider: mcp.name,
+          traceId,
+          reason: e?.message || String(e)
+        });
       }
     }
 
@@ -473,10 +826,10 @@ export async function executeAgentCore(
   }
 
   // Register A2A Sub-Agent delegation tools if configured
-  if (depth < 2 && agent.subAgents && agent.subAgents.length > 0) {
-    for (const subId of agent.subAgents) {
+  if (flags.a2aDelegation && depth < 2 && agent.subAgents && agent.subAgents.length > 0) {
+    for (const subId of agent.subAgents.slice(0, 5)) {
       const subAgent = await getAgent(subId, env);
-      if (subAgent && subAgent.id !== agent.id) {
+      if (subAgent && subAgent.id !== agent.id && (subAgent.visibility !== 'private' || validWireKey)) {
         const handoffToolName = `delegate_to_${subAgent.slug.replace(/[^a-zA-Z0-9_]/g, '_')}`;
         toolMap.set(handoffToolName, { mcpUrl: 'internal://a2a', subAgentId: subAgent.id });
         openRouterTools.push({
@@ -502,19 +855,25 @@ export async function executeAgentCore(
     type: 'thought',
     timestamp: new Date().toISOString(),
     durationMs: Date.now() - step2Start,
-    content: `Loaded ${openRouterTools.length} tools across ${agent.mcps.length} MCP connectors${agent.subAgents?.length ? ` and ${agent.subAgents.length} A2A sub-agent handoffs` : ''}.`
+    content: `Loaded ${openRouterTools.length} tools across ${(agent.mcps || []).length} MCP connectors${agent.subAgents?.length ? ` and ${agent.subAgents.length} A2A sub-agent handoffs` : ''}.`
   });
 
-  // Determine OpenRouter API Key: Request Header > Agent Config > Environment Variable
-  const customKey = request.headers.get('X-OpenRouter-Key') || '';
+  // Determine OpenRouter API Key: Request Header > Agent Config > Environment Variable (skipping dead env key)
+  const customKey = (request.headers.get('X-OpenRouter-Key') || '').trim();
   const openRouterBearer = !bearerKey.startsWith('wire_live_') && bearerKey.length > 20 ? bearerKey : '';
-  const apiKey = customKey || openRouterBearer || agent.openRouterKey || env.OPENROUTER_API_KEY;
+  const envOpenRouterKey =
+    env.OPENROUTER_API_KEY &&
+    (!deadEnvOpenRouterKey || deadEnvOpenRouterKey.key !== env.OPENROUTER_API_KEY || Date.now() > deadEnvOpenRouterKey.until)
+      ? env.OPENROUTER_API_KEY
+      : '';
+  const apiKey = customKey || openRouterBearer || agent.openRouterKey || envOpenRouterKey;
 
   let finalResult = '';
   let structuredOutput: Record<string, unknown> | undefined = undefined;
   let modelUsed = agent.models[0] || 'anthropic/claude-3.5-sonnet';
   let tokensUsage: { prompt: number; completion: number; reasoning?: number; total: number } | undefined;
-  const effectiveMaxTokens = (payload as any).max_tokens || payload.maxTokens || agent.maxTokens || 2048;
+  const rawMaxTokens = Number((payload as any).max_tokens ?? payload.maxTokens ?? agent.maxTokens ?? 2048);
+  const effectiveMaxTokens = Math.min(8192, Math.max(1, Number.isFinite(rawMaxTokens) ? Math.floor(rawMaxTokens) : 2048));
   const maxToolSteps = Math.min(5, Math.max(1, agent.guardrails?.maxToolSteps || 5));
 
   if (apiKey) {
@@ -526,13 +885,17 @@ export async function executeAgentCore(
         for (const m of historySlice) {
           messages.push({ role: m.role, content: m.content });
         }
-      } else if (payload.messages && payload.messages.length > 0) {
-        for (const m of payload.messages) {
+        messages.push({ role: 'user', content: task });
+      } else if (sanitizedCallerMessages.length > 0) {
+        for (const m of sanitizedCallerMessages) {
           messages.push({ role: m.role, content: m.content });
         }
+        if (explicitTaskInput) {
+          messages.push({ role: 'user', content: task });
+        }
+      } else {
+        messages.push({ role: 'user', content: task });
       }
-
-      messages.push({ role: 'user', content: task });
 
       for (let round = 0; round < maxToolSteps; round++) {
         const openRouterPayload: Record<string, unknown> = {
@@ -571,20 +934,24 @@ export async function executeAgentCore(
             'HTTP-Referer': url.origin,
             'X-Title': `AgentWire - ${agent.name}`
           },
-          body: JSON.stringify(openRouterPayload)
+          body: JSON.stringify(openRouterPayload),
+          signal: AbortSignal.timeout(25000)
         });
 
         if (!llmRes.ok) {
           const errText = await llmRes.text();
+          if (llmRes.status === 401 && env.OPENROUTER_API_KEY && apiKey === env.OPENROUTER_API_KEY) {
+            deadEnvOpenRouterKey = { key: env.OPENROUTER_API_KEY, until: Date.now() + 5 * 60 * 1000 };
+          }
           let parsedErr: any = null;
           try {
             parsedErr = JSON.parse(errText);
           } catch {}
+          const summaryMsg = scrubSecrets(parsedErr?.error?.message || `HTTP ${llmRes.status}`);
           if (llmRes.status === 402) {
-            const msg = parsedErr?.error?.message || errText;
-            throw new Error(`OpenRouter Credit Limit (402): ${msg}`);
+            throw new Error(`OpenRouter Credit Limit (402): ${summaryMsg}`);
           }
-          throw new Error(`OpenRouter returned ${llmRes.status}: ${errText}`);
+          throw new Error(`OpenRouter returned ${llmRes.status}: ${summaryMsg}`);
         }
 
         const llmData: any = await llmRes.json();
@@ -628,13 +995,16 @@ export async function executeAgentCore(
               if (subAgent) {
                 const subRes = await executeAgentCore(
                   subAgent,
-                  { task: parsedArgs.task || task },
+                  { task: coerceContentToString(parsedArgs?.task) || task },
                   request,
                   env,
                   corsHeaders,
                   depth + 1
                 );
-                toolOutput = { subAgentId: subAgent.id, result: (subRes.body as RunAgentResponse).result };
+                toolOutput =
+                  subRes.status === 200
+                    ? { subAgentId: subAgent.id, result: (subRes.body as RunAgentResponse).result }
+                    : { subAgentId: subAgent.id, error: (subRes.body as { error?: string }).error || `HTTP ${subRes.status}` };
               }
               steps.push({
                 step: steps.length + 1,
@@ -692,13 +1062,18 @@ export async function executeAgentCore(
         finalResult = 'Completed multi-step tool execution loop.';
       }
     } catch (e: any) {
-      console.warn('LLM invocation fallback to sandbox:', e.message);
+      const safeReason = scrubSecrets(e?.message || String(e)).slice(0, 240);
+      logStructured('warn', 'llm.openrouter_fallback_sandbox', {
+        provider: 'openrouter',
+        traceId,
+        reason: safeReason
+      });
       steps.push({
         step: steps.length + 1,
         type: 'thought',
         timestamp: new Date().toISOString(),
         durationMs: 1,
-        content: `OpenRouter live call unavailable (${e.message}); falling back to deterministic Edge Sandbox engine.`
+        content: `OpenRouter live call unavailable (${safeReason}); falling back to deterministic Edge Sandbox engine.`
       });
     }
   }
@@ -729,7 +1104,6 @@ export async function executeAgentCore(
     });
     finalResult = sandboxSim.finalResult;
     structuredOutput = sandboxSim.structuredOutput;
-
     const estPrompt = Math.max(48, Math.ceil((fullSystemPrompt.length + task.length) / 4));
     const estCompletion = Math.max(32, Math.ceil(finalResult.length / 4));
     const estReasoning = estimateReasoningTokens(effectiveReasoningEffort);
@@ -748,7 +1122,6 @@ export async function executeAgentCore(
     } catch {}
   }
 
-  const isError = finalResult.startsWith('[OpenRouter Error]');
   const durationMs = Date.now() - startTime;
   const estimatedCostUsd = tokensUsage
     ? Number((tokensUsage.prompt * 0.000003 + tokensUsage.completion * 0.000015).toFixed(6))
@@ -762,7 +1135,7 @@ export async function executeAgentCore(
     content: finalResult
   });
 
-  // Update invocation count
+  // Update invocation count without clobbering concurrent fields unexpectedly
   agent.invocationCount = (agent.invocationCount || 0) + 1;
   agent.lastInvokedAt = new Date().toISOString();
   await saveAgent(agent, env);
@@ -794,8 +1167,7 @@ export async function executeAgentCore(
     task,
     result: finalResult,
     structuredOutput,
-    status: isError ? 'error' : 'success',
-    error: isError ? finalResult : undefined,
+    status: 'success',
     modelUsed,
     modelsAttempted: agent.models,
     reasoningEffort: effectiveReasoningEffort,
@@ -867,14 +1239,24 @@ export async function runAgentEvaluationSuite(
     }
   ];
 
-  const suite = customCases && customCases.length > 0 ? customCases : defaultCases;
+  const validCustomCases = Array.isArray(customCases)
+    ? customCases
+        .filter(c => c && typeof c === 'object' && typeof c.task === 'string' && c.task.trim().length > 0)
+        .slice(0, 10)
+    : [];
+  const suite = validCustomCases.length > 0 ? validCustomCases : defaultCases;
   const results: AgentEvalCaseResult[] = [];
 
-  for (const testCase of suite) {
+  for (let idx = 0; idx < suite.length; idx++) {
+    const testCase = suite[idx];
+    const caseId = typeof testCase.id === 'string' && testCase.id ? testCase.id : `eval_case_${idx + 1}`;
+    const caseName = typeof testCase.name === 'string' && testCase.name ? testCase.name : `Case ${idx + 1}`;
+    const caseTask = String(testCase.task).slice(0, 4000);
+
     const exec = await executeAgentCore(
       agent,
       {
-        task: testCase.task,
+        task: caseTask,
         responseFormat: testCase.expectJson ? 'json_object' : 'text'
       },
       request,
@@ -882,18 +1264,38 @@ export async function runAgentEvaluationSuite(
       corsHeaders
     );
 
+    if (exec.status !== 200) {
+      const errDetail = (exec.body as { error?: string }).error || `HTTP ${exec.status}`;
+      results.push({
+        id: caseId,
+        name: caseName,
+        task: caseTask,
+        passed: false,
+        durationMs: 0,
+        runId: 'blocked',
+        outputPreview: errDetail.slice(0, 180),
+        assertions: [{ label: 'Agent execution succeeded', passed: false, detail: errDetail }]
+      });
+      if (exec.status === 429 || exec.status === 401) {
+        break;
+      }
+      continue;
+    }
+
     const execBody = exec.body as RunAgentResponse;
     const output = String(execBody.result || '');
     const assertions: Array<{ label: string; passed: boolean; detail?: string }> = [];
 
-    if (testCase.expectedContains) {
-      for (const needle of testCase.expectedContains) {
+    if (Array.isArray(testCase.expectedContains)) {
+      for (const needle of testCase.expectedContains.slice(0, 10)) {
+        if (typeof needle !== 'string') continue;
         const ok = output.toLowerCase().includes(needle.toLowerCase());
         assertions.push({ label: `Contains "${needle}"`, passed: ok });
       }
     }
-    if (testCase.expectedNotContains) {
-      for (const forbidden of testCase.expectedNotContains) {
+    if (Array.isArray(testCase.expectedNotContains)) {
+      for (const forbidden of testCase.expectedNotContains.slice(0, 10)) {
+        if (typeof forbidden !== 'string') continue;
         const ok = !output.toLowerCase().includes(forbidden.toLowerCase());
         assertions.push({ label: `Excludes "${forbidden}"`, passed: ok });
       }
@@ -906,7 +1308,7 @@ export async function runAgentEvaluationSuite(
       } catch {}
       assertions.push({ label: 'Valid JSON output', passed: validJson });
     }
-    if (testCase.maxDurationMs) {
+    if (typeof testCase.maxDurationMs === 'number' && testCase.maxDurationMs > 0) {
       const underBudget = execBody.durationMs <= testCase.maxDurationMs;
       assertions.push({
         label: `Latency <= ${testCase.maxDurationMs}ms`,
@@ -917,9 +1319,9 @@ export async function runAgentEvaluationSuite(
 
     const allPassed = assertions.every(a => a.passed);
     results.push({
-      id: testCase.id,
-      name: testCase.name,
-      task: testCase.task,
+      id: caseId,
+      name: caseName,
+      task: caseTask,
       passed: allPassed,
       durationMs: execBody.durationMs,
       runId: execBody.runId,
@@ -930,7 +1332,7 @@ export async function runAgentEvaluationSuite(
 
   const passedCount = results.filter(r => r.passed).length;
   return {
-    evalId: `eval_${Date.now()}`,
+    evalId: `eval_${Date.now()}_${cryptoRandomHex(3)}`,
     agentId: agent.id,
     agentName: agent.name,
     timestamp: new Date().toISOString(),

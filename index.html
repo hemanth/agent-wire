@@ -13,53 +13,13 @@
     <!-- Agent-Ready Level 5 Discovery Links (RFC 9727 / SEP-1649 / A2A v1.0) -->
     <link rel="api-catalog" href=".well-known/api-catalog" type="application/linkset+json" />
     <link rel="service-desc" href="openapi.json" type="application/openapi+json" />
-    <link rel="service-doc" href="llms.txt" type="text/markdown" />
+    <link rel="service-doc" href="llms.txt" type="text/plain" />
     <link rel="alternate" href="index.md" type="text/markdown" title="Markdown Twin" />
     <link rel="mcp-server" href=".well-known/mcp/server-card.json" type="application/json" />
     <link rel="agent-card" href=".well-known/agent-card.json" type="application/json" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <script>
-      // Subpath-aware fetch router (supports both root / and /ai/agent-wire/) + WebMCP registration
-      (function initAgentWireRuntime() {
-        try {
-          var basePrefix = window.location.pathname.startsWith('/ai/agent-wire') ? '/ai/agent-wire' : '';
-          if (basePrefix && typeof window.fetch === 'function') {
-            var origFetch = window.fetch.bind(window);
-            window.fetch = function(input, init) {
-              if (typeof input === 'string' && /^\/(api\/|mcp\b|v1\/|\.well-known\/|openapi\.json|llms\.txt)/.test(input)) {
-                input = basePrefix + input;
-              }
-              return origFetch(input, init);
-            };
-          }
-          if (typeof navigator !== 'undefined' && navigator.modelContext && typeof navigator.modelContext.registerTool === 'function') {
-            navigator.modelContext.registerTool({
-              name: 'agentwire_run_agent',
-              description: 'Execute a deployed AgentWire agent by ID with a prompt and optional sessionId.',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  agentId: { type: 'string', description: 'Agent ID, e.g. agt_design_critic' },
-                  input: { type: 'string', description: 'Prompt or task payload' },
-                  sessionId: { type: 'string', description: 'Optional stateful session ID' }
-                },
-                required: ['agentId', 'input']
-              },
-              async execute(args) {
-                var res = await window.fetch('/api/agents/' + encodeURIComponent(args.agentId) + '/run', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ input: args.input, sessionId: args.sessionId })
-                });
-                return await res.json();
-              }
-            });
-          }
-        } catch (_) {}
-      })();
-    </script>
   </head>
   <body class="bg-[#FAFAFA] text-zinc-900 font-sans antialiased min-h-screen selection:bg-zinc-200 selection:text-zinc-950">
     <div id="root"></div>

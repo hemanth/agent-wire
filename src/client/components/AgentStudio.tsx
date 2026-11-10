@@ -59,13 +59,13 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
     });
   };
 
-  const probeMcp = async (id: string, url: string) => {
+  const probeMcp = async (id: string, url: string, headers?: Record<string, string>) => {
     setProbingMcpId(id);
     try {
       const res = await fetch('/api/mcp/probe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, headers })
       });
       const data = await res.json();
       setMcps(prev => prev.map(m => m.id === id ? { ...m, status: data.success ? 'connected' : 'error', tools: data.tools || m.tools || [], errorMessage: data.error } : m));
@@ -106,9 +106,17 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
     setError(null);
 
     try {
+      const derivedSlug =
+        slug.trim() ||
+        name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 80) ||
+        'custom-agent';
       const payload: Partial<Agent> = {
         name: name.trim(),
-        slug: slug.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        slug: derivedSlug,
         tagline: tagline.trim(),
         systemPrompt: systemPrompt.trim(),
         models: selectedModels,
@@ -119,8 +127,7 @@ export const AgentStudio: React.FC<AgentStudioProps> = ({
         guardrails,
         mcps,
         skills,
-        visibility,
-        openRouterKey: openRouterKey || undefined
+        visibility
       };
 
       const res = await fetch('/api/agents', {

@@ -111,7 +111,7 @@ test.describe('Tracking, Observability & Permissions Suite', () => {
   });
 
   // 5. UI Verification: Run History Tab & API Keys Modal in Browser
-  test('UI displays Run History tab and opens API Keys modal', async ({ page }) => {
+  test('UI displays Run History tab and opens API Keys modal', async ({ page }, testInfo) => {
     await page.goto(baseUrl);
 
     // Open Runner Modal for first agent
@@ -140,7 +140,7 @@ test.describe('Tracking, Observability & Permissions Suite', () => {
 
     // Take screenshot of API Keys modal
     await page.screenshot({
-      path: '/Users/lika/.gemini/antigravity-cli/brain/4fd99f72-20af-4d22-b050-98f3a394b625/api_keys_modal_ui.png'
+      path: testInfo.outputPath('api_keys_modal_ui.png')
     });
   });
 });

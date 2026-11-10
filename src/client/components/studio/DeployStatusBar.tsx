@@ -25,8 +25,8 @@ export const DeployStatusBar: React.FC<DeployStatusBarProps> = ({
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="text-xs text-zinc-500 font-mono flex items-center gap-1.5">
-          <Terminal className="w-3.5 h-3.5 text-zinc-400" aria-hidden="true" />
+        <div className="text-xs text-zinc-600 font-mono flex items-center gap-1.5">
+          <Terminal className="w-3.5 h-3.5 text-zinc-500" aria-hidden="true" />
           <span>
             Target Endpoint:{' '}
             <code className="text-zinc-900 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded-md font-semibold">

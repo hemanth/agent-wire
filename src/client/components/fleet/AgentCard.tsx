@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Layers, Wrench, BookOpen, Activity, Terminal, Check, Trash2, Globe, Lock } from 'lucide-react';
 import { Agent } from '../../../types.ts';
+import { getPublicBaseUrl } from '../../lib/runtime-init.ts';
 
 interface AgentCardProps {
   agent: Agent;
@@ -12,11 +13,12 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onDelete 
   const [copied, setCopied] = useState(false);
 
   const totalTools = (agent.mcps || []).reduce((acc, m) => acc + (m.tools?.length || 0), 0);
-  const activeSkills = (agent.skills || []).filter(s => s.enabled);
+  const activeSkills = (agent.skills || []).filter(s => s.enabled !== false);
 
   const handleCopyCurl = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const endpoint = `${window.location.origin}/api/agents/${agent.id}/run`;
+    const safeId = encodeURIComponent(agent.id.replace(/[^a-zA-Z0-9_-]/g, ''));
+    const endpoint = `${getPublicBaseUrl()}/api/agents/${safeId}/run`;
     const curl = `curl -X POST ${endpoint} \\\n  -H "Content-Type: application/json" \\\n  -d '{"task": "Hello! Report your status."}'`;
     navigator.clipboard.writeText(curl);
     setCopied(true);
@@ -61,8 +63,8 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onDelete 
                 <span>Private</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-600 font-medium">
-                <Globe className="w-2.5 h-2.5 text-zinc-500" aria-hidden="true" />
+              <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-700 font-medium">
+                <Globe className="w-2.5 h-2.5 text-zinc-600" aria-hidden="true" />
                 <span>Public</span>
               </span>
             )}
@@ -75,8 +77,8 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onDelete 
 
         {/* Model Fallback Chain */}
         <div className="my-3 py-2 px-2.5 rounded-lg bg-zinc-50 border border-zinc-200 space-y-1">
-          <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider flex items-center gap-1 font-semibold">
-            <Layers className="w-3 h-3 text-zinc-500" aria-hidden="true" />
+          <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider flex items-center gap-1 font-semibold">
+            <Layers className="w-3 h-3 text-zinc-600" aria-hidden="true" />
             <span>Model Fallback Chain:</span>
           </div>
           <div className="flex flex-wrap items-center gap-1">
@@ -108,8 +110,8 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onDelete 
 
       {/* Bottom Actions */}
       <div className="pt-3 border-t border-zinc-100 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5 text-zinc-500 font-mono text-[11px]">
-          <Activity className="w-3 h-3 text-zinc-400" aria-hidden="true" />
+        <div className="flex items-center gap-1.5 text-zinc-600 font-mono text-[11px]">
+          <Activity className="w-3 h-3 text-zinc-500" aria-hidden="true" />
           <span>{agent.invocationCount || 0} runs</span>
         </div>
 

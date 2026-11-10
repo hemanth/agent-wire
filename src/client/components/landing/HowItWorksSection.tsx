@@ -34,7 +34,7 @@ skills: ["taste-skill", "code-review"]`
       desc: 'Click Deploy to get a permanent edge URL. Trigger tasks via cURL, Python requests, or fetch() with multi-turn tool calling.',
       icon: Terminal,
       lang: 'bash' as const,
-      snippet: `curl -X POST https://agentwire.edge/api/agents/taste-critic/run \\
+      snippet: `curl -X POST https://h3manth.com/ai/agent-wire/api/agents/design-critic/run \\
   -H "Content-Type: application/json" \\
   -d '{"task": "Audit this UI against high contrast rules"}'`
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Check, Zap, AlertCircle } from 'lucide-react';
+import { Terminal, Check, Zap, ShieldCheck, Network } from 'lucide-react';
 import { ToolExecutionStep } from '../../../types.ts';
 
 interface ExecutionTraceProps {
@@ -17,7 +17,7 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ steps }) => {
     >
       <div className="px-3.5 py-2 border-b border-zinc-200 bg-zinc-50 text-zinc-700 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Terminal className="w-3.5 h-3.5 text-zinc-500" aria-hidden="true" />
+          <Terminal className="w-3.5 h-3.5 text-zinc-600" aria-hidden="true" />
           <span className="font-semibold text-zinc-950">Execution Trace & Tool Calls</span>
         </div>
         <span className="text-[10px] text-zinc-700 bg-white border border-zinc-200 px-2 py-0.5 rounded shadow-2xs font-medium">
@@ -28,7 +28,7 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ steps }) => {
       <div className="p-3.5 space-y-2.5 max-h-64 overflow-y-auto">
         {steps.map((step, idx) => (
           <div key={idx} className="flex items-start gap-2.5 text-zinc-800">
-            <span className="text-zinc-500 select-none text-[11px] pt-0.5 font-bold">
+            <span className="text-zinc-600 select-none text-[11px] pt-0.5 font-bold">
               [{idx + 1}]
             </span>
             <div className="flex-1 min-w-0">
@@ -37,11 +37,29 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ steps }) => {
                   {step.content}
                 </p>
               )}
+              {step.type === 'guardrail' && (
+                <div className="text-amber-900 flex items-start gap-1.5 break-words">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-700" aria-hidden="true" />
+                  <div>
+                    <span className="font-bold text-amber-900">Guardrail Shield:</span>{' '}
+                    <span className="text-zinc-700">{step.content}</span>
+                  </div>
+                </div>
+              )}
+              {step.type === 'handoff' && (
+                <div className="text-sky-950 flex items-start gap-1.5 break-words">
+                  <Network className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sky-700" aria-hidden="true" />
+                  <div>
+                    <span className="font-bold text-sky-950">A2A Peer Handoff:</span>{' '}
+                    <span className="text-zinc-700">{step.content || step.toolName}</span>
+                  </div>
+                </div>
+              )}
               {step.type === 'tool_call' && (
                 <div className="text-zinc-950 flex items-start gap-1.5 break-all">
                   <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" aria-hidden="true" />
                   <div>
-                    <span className="text-zinc-500 font-medium">Call Tool:</span>{' '}
+                    <span className="text-zinc-600 font-medium">Call Tool:</span>{' '}
                     <span className="font-bold text-zinc-950 underline decoration-emerald-300">{step.toolName}</span>
                     <span className="text-zinc-600 font-mono">({JSON.stringify(step.toolArgs)})</span>
                   </div>
@@ -51,7 +69,7 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ steps }) => {
                 <div className="text-zinc-950 flex items-start gap-1.5 break-all">
                   <Check className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" aria-hidden="true" />
                   <div>
-                    <span className="text-zinc-500 font-medium">Result from</span>{' '}
+                    <span className="text-zinc-600 font-medium">Result from</span>{' '}
                     <span className="font-bold text-zinc-950">{step.toolName}</span>:{' '}
                     <span className="text-zinc-700 font-mono">{JSON.stringify(step.toolOutput).slice(0, 200)}</span>
                     {JSON.stringify(step.toolOutput).length > 200 && '...'}

@@ -43,7 +43,7 @@ export const PaletteLegend: React.FC = () => {
           <span className="font-bold text-xs text-zinc-950">
             System Architecture Color Map
           </span>
-          <span className="text-[11px] font-mono text-zinc-500">
+          <span className="text-[11px] font-mono text-zinc-600">
             via Coolors.co
           </span>
         </div>
@@ -73,13 +73,13 @@ export const PaletteLegend: React.FC = () => {
                   aria-hidden="true"
                 />
               </div>
-              <p className="text-[11px] text-zinc-500 leading-snug">
+              <p className="text-[11px] text-zinc-600 leading-snug">
                 {token.desc}
               </p>
             </div>
-            <div className="mt-2.5 pt-1.5 border-t border-zinc-100 flex items-center justify-between text-[10px] font-mono text-zinc-400">
+            <div className="mt-2.5 pt-1.5 border-t border-zinc-100 flex items-center justify-between text-[10px] font-mono text-zinc-600">
               <span>{token.name}</span>
-              <span className="text-zinc-600 font-medium">{token.hex}</span>
+              <span className="text-zinc-700 font-medium">{token.hex}</span>
             </div>
           </div>
         ))}
