@@ -1,10 +1,10 @@
 import type { Agent, AttachedSkill, McpConnector } from './types.ts';
 
 export const DEFAULT_MODELS = [
-  'anthropic/claude-3.5-sonnet',
+  'anthropic/claude-sonnet-4',
   'google/gemini-2.5-flash',
-  'meta-llama/llama-3.3-70b-instruct',
-  'deepseek/deepseek-chat',
+  'qwen/qwen3-235b-a22b',
+  'nvidia/nemotron-super-49b-v1',
 ];
 
 export const AVAILABLE_MODELS = [
@@ -12,11 +12,11 @@ export const AVAILABLE_MODELS = [
   { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', context: '200k', speed: 'Fast', reasoning: false },
   { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google', context: '2M', speed: 'Reasoning', reasoning: true },
   { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google', context: '1M', speed: 'Ultra-fast', reasoning: false },
+  { id: 'qwen/qwen3-235b-a22b', name: 'Qwen3 235B A22B', provider: 'Qwen', context: '128k', speed: 'Reasoning', reasoning: true },
+  { id: 'nvidia/nemotron-super-49b-v1', name: 'NVIDIA Nemotron Super 49B', provider: 'NVIDIA', context: '128k', speed: 'Very Fast', reasoning: true },
   { id: 'openai/o3-mini', name: 'OpenAI o3-mini', provider: 'OpenAI', context: '200k', speed: 'Reasoning', reasoning: true },
   { id: 'openai/gpt-4.1', name: 'GPT-4.1', provider: 'OpenAI', context: '1M', speed: 'Fast', reasoning: false },
-  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'OpenAI', context: '128k', speed: 'Fast', reasoning: false },
   { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1', provider: 'DeepSeek', context: '128k', speed: 'Reasoning', reasoning: true },
-  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', provider: 'Meta', context: '128k', speed: 'Very Fast', reasoning: false },
   { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3', provider: 'DeepSeek', context: '64k', speed: 'Fast', reasoning: false },
 ];
 
@@ -103,7 +103,7 @@ export const STARTER_AGENTS: Agent[] = [
     systemPrompt: `You are an elite Design Critic and Frontend Architect. Your job is to review proposed UI designs, components, or screens.
 You strictly enforce high contrast, typographic hierarchy, responsive spacing, and elimination of AI-slop tropes (like gradient text, excessive cards, and bloated eyebrows).
 When relevant, call the Stitch MCP tools to inspect or generate alternative design screens.`,
-    models: ['anthropic/claude-3.5-sonnet', 'google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct'],
+    models: ['anthropic/claude-sonnet-4', 'google/gemini-2.5-pro', 'qwen/qwen3-235b-a22b'],
     temperature: 0.3,
     maxTokens: 2048,
     reasoningEffort: 'medium',
@@ -130,7 +130,7 @@ When relevant, call the Stitch MCP tools to inspect or generate alternative desi
     tagline: 'Connects to GitHub MCP to analyze bug reports, verify reproduction steps, and draft fixes',
     systemPrompt: `You are an autonomous engineering triage assistant.
 When given an issue or PR task, you query the GitHub MCP tools to fetch the issue details, examine the diff, check for security regressions, and propose actionable next steps.`,
-    models: ['google/gemini-2.5-flash', 'anthropic/claude-3.5-sonnet'],
+    models: ['google/gemini-2.5-flash', 'nvidia/nemotron-super-49b-v1', 'anthropic/claude-sonnet-4'],
     temperature: 0.2,
     maxTokens: 2048,
     reasoningEffort: 'medium',

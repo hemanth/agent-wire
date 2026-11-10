@@ -12,7 +12,7 @@ export const PALETTE_TOKENS = [
     name: 'Mauve Lilac',
     hex: '#E4C1F9',
     role: 'Model Routing',
-    desc: 'OpenRouter auto-failover (Claude, Gemini, Llama)'
+    desc: 'OpenRouter auto-failover (Claude, Gemini, Qwen3, Nemotron)'
   },
   {
     name: 'Vanilla Custard',

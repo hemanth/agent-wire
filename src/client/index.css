@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body {
+    overflow-x: clip;
+  }
+
   body {
     @apply bg-[#FAFAFA] text-zinc-900 antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";

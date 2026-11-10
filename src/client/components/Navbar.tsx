@@ -31,7 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="border-b border-zinc-200/70 bg-white/80 sticky top-0 z-40 backdrop-blur-md shadow-[0_2px_16px_rgba(0,0,0,0.02)]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 min-h-14 py-2 sm:py-0 sm:h-16 flex flex-wrap items-center justify-between gap-2">
         
         {/* Brand */}
         <button
@@ -48,8 +48,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Tab Navigation: ToneBird Pill Switcher */}
-        <nav aria-label="Main navigation">
-          <div aria-label="Workspace views" className="flex items-center bg-zinc-100/90 p-1 rounded-full border border-zinc-200/80 shadow-2xs" role="tablist">
+        <nav aria-label="Main navigation" className="order-3 w-full sm:order-none sm:w-auto flex justify-center">
+          <div aria-label="Workspace views" className="flex items-center bg-zinc-100/90 p-1 rounded-full border border-zinc-200/80 shadow-2xs max-w-full" role="tablist">
             <button
               id="nav-tab-landing"
               type="button"
@@ -58,13 +58,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-controls="main-content"
               onClick={() => setActiveTab('landing')}
               onKeyDown={e => handleTabKeyDown(e, 0)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 activeTab === 'landing'
                   ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/50'
               }`}
             >
-              <Compass className="w-3.5 h-3.5" aria-hidden="true" />
+              <Compass className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
               <span>Overview</span>
             </button>
             <button
@@ -75,13 +75,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-controls="main-content"
               onClick={() => setActiveTab('fleet')}
               onKeyDown={e => handleTabKeyDown(e, 1)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 activeTab === 'fleet'
                   ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/50'
               }`}
             >
-              <Bot className="w-3.5 h-3.5" aria-hidden="true" />
+              <Bot className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
               <span>Fleet ({agentCount})</span>
             </button>
             <button
@@ -92,13 +92,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-controls="main-content"
               onClick={() => setActiveTab('studio')}
               onKeyDown={e => handleTabKeyDown(e, 2)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 ${
                 activeTab === 'studio'
                   ? 'bg-white text-zinc-950 border border-zinc-200 shadow-2xs font-semibold'
                   : 'text-zinc-700 hover:text-zinc-950 hover:bg-white/50'
               }`}
             >
-              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              <Plus className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
               <span>New Agent</span>
             </button>
           </div>

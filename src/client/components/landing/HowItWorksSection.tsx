@@ -18,13 +18,14 @@ POST /api/mcp/probe
     {
       num: '02',
       title: 'Attach Skills & Model Fallbacks',
-      desc: 'Inject domain-specific SKILL.md rules (e.g. Taste Skills) and define fallback order across Claude 3.5, Gemini 2.5, and Llama 3.3.',
+      desc: 'Inject domain-specific SKILL.md rules (e.g. Taste Skills) and define fallback order across Claude Sonnet 4, Gemini 2.5, Qwen3, and Nemotron.',
       icon: Layers,
       lang: 'javascript' as const,
       snippet: `// Fallback Chain & Skill Injection
 models: [
-  "anthropic/claude-3.5-sonnet",
-  "google/gemini-2.5-flash"
+  "anthropic/claude-sonnet-4",
+  "google/gemini-2.5-flash",
+  "qwen/qwen3-235b-a22b"
 ]
 skills: ["taste-skill", "code-review"]`
     },

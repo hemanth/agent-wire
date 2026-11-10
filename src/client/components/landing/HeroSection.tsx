@@ -11,7 +11,7 @@ const DEMOS = [
     name: 'Taste & UI Critic',
     badge: 'Design Architect',
     task: 'Audit landing page hero for AI slop tropes & check contrast',
-    model: 'claude-3.5-sonnet',
+    model: 'claude-sonnet-4',
     tool: 'stitch_mcp:inspect_hierarchy',
     tokens: 284,
     latency: '342ms',
@@ -25,13 +25,13 @@ const DEMOS = [
     tool: 'github_mcp:get_pr_diff',
     tokens: 412,
     latency: '198ms',
-    output: '✓ Verified input sanitization on POST /api/agents/:id/run\n✓ Model fallback chain active: Claude ➔ Gemini ➔ Llama\n✓ Zero security regressions detected in token budgeting'
+    output: '✓ Verified input sanitization on POST /api/agents/:id/run\n✓ Model fallback chain active: Claude ➔ Gemini ➔ Qwen3 ➔ Nemotron\n✓ Zero security regressions detected in token budgeting'
   },
   {
     name: 'Design Stitch',
     badge: 'Stitch MCP',
     task: 'Generate stitch layout variants with ToneBird glass panels',
-    model: 'llama-3.3-70b',
+    model: 'qwen3-235b-a22b',
     tool: 'stitch_mcp:create_variants',
     tokens: 360,
     latency: '265ms',
@@ -108,13 +108,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onGoToStudio, onGoToFl
           </div>
 
           {/* Simulated App Card */}
-          <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-4 space-y-3 font-mono text-xs">
+          <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 sm:p-4 space-y-3 font-mono text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-full bg-zinc-200/80 border border-zinc-300/80 text-zinc-800 text-[11px] font-semibold">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="px-2 py-0.5 rounded-full bg-zinc-200/80 border border-zinc-300/80 text-zinc-800 text-[11px] font-semibold shrink-0">
                   {demo.badge}
                 </span>
-                <span className="text-zinc-600 truncate font-sans font-medium text-xs">
+                <span className="text-zinc-600 truncate font-sans font-medium text-xs min-w-0">
                   Task: "{demo.task}"
                 </span>
               </div>
@@ -128,10 +128,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onGoToStudio, onGoToFl
 
             {/* MCP Call & Output */}
             <div className="rounded-lg border border-zinc-200 bg-white p-3 space-y-2 shadow-2xs">
-              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] text-zinc-500">
                 <Wrench className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                 <span className="text-zinc-800 font-semibold">Remote MCP Invocation:</span>
-                <code className="text-zinc-800 bg-zinc-100 px-1.5 py-0.5 rounded">{demo.tool}</code>
+                <code className="text-zinc-800 bg-zinc-100 px-1.5 py-0.5 rounded break-all">{demo.tool}</code>
               </div>
               <pre className="text-zinc-800 text-[11px] font-mono leading-relaxed whitespace-pre-wrap bg-zinc-50 p-2.5 rounded-md border border-zinc-100">
                 {demo.output}
@@ -157,7 +157,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onGoToStudio, onGoToFl
               </div>
               <div className="min-w-0">
                 <div className="text-[11px] font-mono font-bold text-zinc-900">[2] OpenRouter Failover</div>
-                <div className="text-[10px] text-zinc-500 truncate">Claude ➔ Gemini ➔ Llama</div>
+                <div className="text-[10px] text-zinc-500 truncate">Claude ➔ Gemini ➔ Qwen3 ➔ Nemotron</div>
               </div>
             </div>
 

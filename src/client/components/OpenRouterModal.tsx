@@ -61,7 +61,7 @@ export const OpenRouterModal: React.FC<OpenRouterModalProps> = ({ currentKey, on
                 OpenRouter Model Gateway
               </h2>
               <p className="text-xs text-zinc-600">
-                Automatic Multi-Model Fallbacks (Claude, Gemini, Llama)
+                Automatic Multi-Model Fallbacks (Claude, Gemini, Qwen3, Nemotron)
               </p>
             </div>
           </div>
