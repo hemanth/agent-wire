@@ -58,6 +58,7 @@ import {
   probeMcpServer,
   validateAgentInput,
   executeAgentCore,
+  computeCallerPrincipalHash,
   runAgentEvaluationSuite
 } from './engine.ts';
 import { evaluateFeatureFlags } from './flags.ts';
@@ -515,12 +516,24 @@ async function handleWorkerRequest(
             {
               task: toolArgs.input || toolArgs.task || toolArgs.prompt || 'Report capabilities',
               sessionId: toolArgs.sessionId,
+              callerPrincipal: typeof toolArgs.user === 'string' ? toolArgs.user : undefined,
+              mcpToken: typeof toolArgs.mcpToken === 'string' ? toolArgs.mcpToken : undefined,
               reasoningEffort: toolArgs.reasoningEffort
             },
             request,
             env,
             corsHeaders
           );
+
+          if (exec.status === 401 || exec.status === 403 || exec.status === 429) {
+            return jsonRpcError(
+              id,
+              -32001,
+              (exec.body as { error?: string }).error || 'Request rejected',
+              corsHeaders,
+              exec.status
+            );
+          }
 
           const execBody = exec.body as RunAgentResponse;
           return jsonRpcSuccess(
@@ -683,6 +696,8 @@ async function handleWorkerRequest(
           {
             task: textPart,
             sessionId: params.sessionId,
+            callerPrincipal: typeof params.user === 'string' ? params.user : undefined,
+            mcpToken: typeof params.mcpToken === 'string' ? params.mcpToken : undefined,
             reasoningEffort: params.reasoningEffort
           },
           request,
@@ -690,7 +705,7 @@ async function handleWorkerRequest(
           corsHeaders
         );
 
-        if (exec.status === 401 || exec.status === 429) {
+        if (exec.status === 401 || exec.status === 403 || exec.status === 429) {
           return jsonRpcError(
             rpcId,
             -32001,
@@ -819,6 +834,9 @@ async function handleWorkerRequest(
         {
           messages: body.messages,
           task: body.prompt,
+          sessionId: typeof (body.session_id || body.sessionId) === 'string' ? (body.session_id || body.sessionId) : undefined,
+          callerPrincipal: typeof body.user === 'string' ? body.user : undefined,
+          mcpToken: typeof (body.mcp_token || body.mcpToken) === 'string' ? (body.mcp_token || body.mcpToken) : undefined,
           maxTokens: body.max_tokens || body.max_completion_tokens,
           reasoningEffort: body.reasoning_effort,
           responseFormat: body.response_format?.type
@@ -833,7 +851,12 @@ async function handleWorkerRequest(
           JSON.stringify({
             error: {
               message: (exec.body as { error?: string }).error || 'Agent execution rejected',
-              type: exec.status === 401 ? 'authentication_error' : 'rate_limit_error'
+              type:
+                exec.status === 401
+                  ? 'authentication_error'
+                  : exec.status === 403
+                    ? 'permission_error'
+                    : 'rate_limit_error'
             }
           }),
           { status: exec.status, headers: exec.headers }
@@ -948,6 +971,9 @@ async function handleWorkerRequest(
         targetAgent,
         {
           task: inputStr,
+          sessionId: typeof (body.session_id || body.sessionId) === 'string' ? (body.session_id || body.sessionId) : undefined,
+          callerPrincipal: typeof body.user === 'string' ? body.user : undefined,
+          mcpToken: typeof (body.mcp_token || body.mcpToken) === 'string' ? (body.mcp_token || body.mcpToken) : undefined,
           reasoningEffort: body.reasoning?.effort,
           maxTokens: body.max_output_tokens
         },
@@ -961,7 +987,12 @@ async function handleWorkerRequest(
           JSON.stringify({
             error: {
               message: (exec.body as { error?: string }).error || 'Agent execution rejected',
-              type: exec.status === 401 ? 'authentication_error' : 'rate_limit_error'
+              type:
+                exec.status === 401
+                  ? 'authentication_error'
+                  : exec.status === 403
+                    ? 'permission_error'
+                    : 'rate_limit_error'
             }
           }),
           { status: exec.status, headers: exec.headers }
@@ -1133,7 +1164,10 @@ async function handleWorkerRequest(
       return unauthorizedPrivateAgentResponse(corsHeaders);
     }
     if (request.method === 'GET') {
-      const sessions = await listSessions(agent.id, env);
+      const { callerPrincipalHash } = await computeCallerPrincipalHash(request, env);
+      const sessions = (await listSessions(agent.id, env))
+        .filter(s => !s.principalHash || s.principalHash === callerPrincipalHash)
+        .map(({ principalHash: _ph, ...pub }) => pub);
       return jsonResponse({ sessions }, corsHeaders);
     }
     if (request.method === 'POST') {
@@ -1204,11 +1238,20 @@ async function handleWorkerRequest(
     }
     const sessionId = sessionItemMatch[2];
     const session = await getSession(agent.id, sessionId, env);
+    const { callerPrincipalHash } = await computeCallerPrincipalHash(request, env);
+    if (session?.principalHash && session.principalHash !== callerPrincipalHash) {
+      return jsonResponse(
+        { error: 'Forbidden: Session is bound to a different caller identity.' },
+        corsHeaders,
+        403
+      );
+    }
     if (request.method === 'GET') {
       if (!session) {
         return jsonResponse({ error: 'Session not found' }, corsHeaders, 404);
       }
-      return jsonResponse(session, corsHeaders);
+      const { principalHash: _ph, ...publicSession } = session;
+      return jsonResponse(publicSession, corsHeaders);
     }
     if (request.method === 'DELETE') {
       await deleteSession(agent.id, sessionId, env);

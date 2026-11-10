@@ -65,6 +65,8 @@ export interface RunAgentRequest {
   prompt?: string;
   messages?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   sessionId?: string;
+  callerPrincipal?: string;
+  mcpToken?: string;
   context?: Record<string, any>;
   memory?: Record<string, any>;
   stream?: boolean;
@@ -137,6 +139,7 @@ export interface AgentSessionMessage {
 export interface AgentSession {
   id: string;
   agentId: string;
+  principalHash?: string;
   createdAt: string;
   updatedAt: string;
   messages: AgentSessionMessage[];

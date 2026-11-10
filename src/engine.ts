@@ -25,6 +25,7 @@ import {
 } from './store.ts';
 import { logStructured, scrubSecrets } from './telemetry.ts';
 import { evaluateFeatureFlags } from './flags.ts';
+import { sha256Hex } from './protocols.ts';
 
 const ALLOWED_REMOTE_PORTS = new Set(['', '80', '443', '8080', '8443']);
 const FORBIDDEN_MCP_HEADERS = new Set([
@@ -513,6 +514,11 @@ export async function executeMcpTool(
           hint: "Authentication required. Provide an 'Authorization: Bearer <token>' header in the MCP Connector configuration or pass 'X-MCP-Authorization: Bearer <token>' in your request headers."
         };
       }
+      if (res.status === 403) {
+        return {
+          error: `MCP server (${mcpUrl}) returned HTTP 403 Forbidden: caller lacks permission or grant was revoked.`
+        };
+      }
       return { error: `MCP tool execution failed: HTTP ${res.status}` };
     }
 
@@ -595,6 +601,41 @@ function buildSandboxSimulationOutput(params: {
 }
 
 let deadEnvOpenRouterKey: { key: string; until: number } | null = null;
+
+export async function computeCallerPrincipalHash(
+  request: Request,
+  env: Env,
+  payload?: Partial<RunAgentRequest>
+): Promise<{ requestMcpAuth: string; callerPrincipal: string; callerPrincipalHash?: string }> {
+  const rawMcpAuth =
+    request.headers.get('X-MCP-Authorization') ||
+    request.headers.get('X-MCP-Token') ||
+    (payload && typeof (payload as any).mcp_token === 'string' ? (payload as any).mcp_token : '') ||
+    (payload && typeof payload.mcpToken === 'string' ? payload.mcpToken : '') ||
+    '';
+  const requestMcpAuth = rawMcpAuth.replace(/[\r\n]/g, '').slice(0, 2048);
+
+  const rawPrincipal =
+    request.headers.get('X-MCP-Principal') ||
+    request.headers.get('X-Forwarded-User') ||
+    (payload && typeof payload.callerPrincipal === 'string' ? payload.callerPrincipal : '') ||
+    '';
+  const callerPrincipal = rawPrincipal.replace(/[\r\n]/g, '').trim().slice(0, 256);
+
+  const wireKeyCandidate = extractWireKey(request);
+  const validWireKey = !requestMcpAuth && !callerPrincipal && wireKeyCandidate
+    ? await validateApiKey(wireKeyCandidate, env)
+    : null;
+
+  const principalParts = [
+    requestMcpAuth ? `mcp:${requestMcpAuth}` : '',
+    callerPrincipal ? `sub:${callerPrincipal}` : '',
+    validWireKey ? `wire:${validWireKey.id}` : ''
+  ].filter(Boolean);
+
+  const callerPrincipalHash = principalParts.length > 0 ? await sha256Hex(principalParts.join('|')) : undefined;
+  return { requestMcpAuth, callerPrincipal, callerPrincipalHash };
+}
 
 export async function executeAgentCore(
   agent: Agent,
@@ -714,7 +755,14 @@ export async function executeAgentCore(
     });
   }
 
-  // Session, Memory & Context resolution
+  // Caller-scoped MCP identity & principal resolution (never persisted in agent or session state)
+  const { requestMcpAuth, callerPrincipal, callerPrincipalHash } = await computeCallerPrincipalHash(
+    request,
+    env,
+    payload
+  );
+
+  // Session, Memory & Context resolution (with principal-bound session isolation)
   const candidateSessionId =
     payload.sessionId ||
     request.headers.get('X-Session-ID') ||
@@ -731,15 +779,31 @@ export async function executeAgentCore(
       session = {
         id: sessionId,
         agentId: agent.id,
+        principalHash: callerPrincipalHash,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         messages: [],
         memory: safeMemoryPatch || {},
         runsCount: 0
       };
-    } else if (safeMemoryPatch) {
-      const merged = sanitizePlainObject({ ...session.memory, ...safeMemoryPatch });
-      if (merged) session.memory = merged;
+    } else {
+      const boundMismatch =
+        (session.principalHash && session.principalHash !== callerPrincipalHash) ||
+        (!session.principalHash && callerPrincipalHash && session.messages.length > 0);
+      if (boundMismatch) {
+        return {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', traceparent, ...corsHeaders },
+          body: { error: 'Forbidden: Session is bound to a different caller identity.' }
+        };
+      }
+      if (!session.principalHash && callerPrincipalHash) {
+        session.principalHash = callerPrincipalHash;
+      }
+      if (safeMemoryPatch) {
+        const merged = sanitizePlainObject({ ...session.memory, ...safeMemoryPatch });
+        if (merged) session.memory = merged;
+      }
     }
   }
 
@@ -785,25 +849,21 @@ export async function executeAgentCore(
     function: { name: string; description: string; parameters: Record<string, unknown> };
   }> = [];
 
-  const rawMcpAuth =
-    request.headers.get('X-MCP-Authorization') ||
-    request.headers.get('X-MCP-Token') ||
-    (typeof (payload as any).mcp_token === 'string' ? (payload as any).mcp_token : '') ||
-    (typeof (payload as any).mcpToken === 'string' ? (payload as any).mcpToken : '') ||
-    '';
-  const requestMcpAuth = rawMcpAuth.replace(/[\r\n]/g, '').slice(0, 2048);
+  const hasCallerScopedIdentity = Boolean(requestMcpAuth || callerPrincipal);
 
   for (const mcp of flags.mcpLiveExecution ? agent.mcps || [] : []) {
     const effectiveHeaders: Record<string, string> = {
       ...sanitizeMcpHeaders(mcp.headers),
-      ...(requestMcpAuth ? { Authorization: requestMcpAuth.startsWith('Bearer ') ? requestMcpAuth : `Bearer ${requestMcpAuth}` } : {})
+      ...(requestMcpAuth ? { Authorization: requestMcpAuth.startsWith('Bearer ') ? requestMcpAuth : `Bearer ${requestMcpAuth}` } : {}),
+      ...(callerPrincipal ? { 'X-MCP-Principal': callerPrincipal } : {})
     };
 
-    let tools: McpTool[] = mcp.tools || [];
-    if (tools.length === 0) {
+    let tools: McpTool[] = hasCallerScopedIdentity ? [] : mcp.tools || [];
+    if (hasCallerScopedIdentity || tools.length === 0) {
       try {
         tools = await probeMcpServer(mcp.url, effectiveHeaders, traceparent);
       } catch (e: any) {
+        tools = [];
         logStructured('warn', 'mcp.runtime_probe_failed', {
           provider: mcp.name,
           traceId,
@@ -1030,10 +1090,9 @@ export async function executeAgentCore(
               });
 
               const toolStart = Date.now();
-              let toolOutput: unknown = { status: 'mock_result', info: `Remote tool executed: ${name}` };
-              if (mcpMeta) {
-                toolOutput = await executeMcpTool(mcpMeta.mcpUrl, name, parsedArgs, mcpMeta.mcpHeaders, traceparent);
-              }
+              const toolOutput: unknown = mcpMeta
+                ? await executeMcpTool(mcpMeta.mcpUrl, name, parsedArgs, mcpMeta.mcpHeaders, traceparent)
+                : { error: `Tool "${name}" is not registered or unavailable for this caller.` };
 
               steps.push({
                 step: steps.length + 1,
