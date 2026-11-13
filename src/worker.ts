@@ -58,10 +58,15 @@ import {
   probeMcpServer,
   validateAgentInput,
   executeAgentCore,
+  routeAndExecuteFleet,
   computeCallerPrincipalHash,
   runAgentEvaluationSuite
 } from './engine.ts';
+import { UserStateDO, callUserStateDo } from './user-do.ts';
+import { routeAcrossFleet, classifyIntentForAgent } from './intent.ts';
 import { evaluateFeatureFlags } from './flags.ts';
+
+export { UserStateDO };
 import {
   classifyStatus,
   getErrorBudgetSummary,
@@ -428,6 +433,19 @@ async function handleWorkerRequest(
               }
             },
             {
+              name: 'route_intent',
+              description: 'Classifies caller intent in <2ms and routes across the AgentWire fleet with sticky per-user continuity.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  task: { type: 'string', description: 'User message or task to classify and route' },
+                  userId: { type: 'string', description: 'Optional sticky user ID for cross-turn continuity' },
+                  sessionId: { type: 'string', description: 'Optional session ID' }
+                },
+                required: ['task']
+              }
+            },
+            {
               name: 'eval_agent',
               description: 'Runs the built-in quality, guardrail, and latency evaluation suite against an agent.',
               inputSchema: {
@@ -489,6 +507,48 @@ async function handleWorkerRequest(
             );
           }
 
+          if (toolName === 'route_intent' || (toolName === 'run_agent' && toolArgs.agentId === 'auto')) {
+            const routedExec = await routeAndExecuteFleet(
+              {
+                task: toolArgs.input || toolArgs.task || toolArgs.prompt || 'Hello!',
+                sessionId: toolArgs.sessionId,
+                userId: typeof (toolArgs.userId || toolArgs.user) === 'string' ? (toolArgs.userId || toolArgs.user) : undefined,
+                userMemory: toolArgs.userMemory,
+                mcpToken: typeof toolArgs.mcpToken === 'string' ? toolArgs.mcpToken : undefined,
+                reasoningEffort: toolArgs.reasoningEffort
+              },
+              request,
+              env,
+              corsHeaders
+            );
+            if (routedExec.status === 401 || routedExec.status === 403 || routedExec.status === 429) {
+              return jsonRpcError(
+                id,
+                -32001,
+                (routedExec.body as { error?: string }).error || 'Request rejected',
+                corsHeaders,
+                routedExec.status
+              );
+            }
+            const routedBody = routedExec.body as RunAgentResponse;
+            return jsonRpcSuccess(
+              id,
+              {
+                content: [{ type: 'text', text: routedBody.result || JSON.stringify(routedBody) }],
+                structuredContent: routedBody,
+                isError: routedExec.status >= 400,
+                _meta: {
+                  runId: routedBody.runId,
+                  traceId: routedBody.traceId,
+                  agentId: routedBody.agentId,
+                  intent: routedBody.intent,
+                  routing: routedBody.routing
+                }
+              },
+              corsHeaders
+            );
+          }
+
           let targetAgentId: string;
           if (toolName === 'run_agent') {
             targetAgentId = typeof toolArgs.agentId === 'string' && toolArgs.agentId ? toolArgs.agentId : 'agt_design_critic';
@@ -516,7 +576,8 @@ async function handleWorkerRequest(
             {
               task: toolArgs.input || toolArgs.task || toolArgs.prompt || 'Report capabilities',
               sessionId: toolArgs.sessionId,
-              callerPrincipal: typeof toolArgs.user === 'string' ? toolArgs.user : undefined,
+              userId: typeof (toolArgs.userId || toolArgs.user) === 'string' ? (toolArgs.userId || toolArgs.user) : undefined,
+              userMemory: toolArgs.userMemory,
               mcpToken: typeof toolArgs.mcpToken === 'string' ? toolArgs.mcpToken : undefined,
               reasoningEffort: toolArgs.reasoningEffort
             },
@@ -669,10 +730,6 @@ async function handleWorkerRequest(
 
       if (method === 'tasks/send' || method === 'message/send') {
         const targetAgentId = agentA2AMatch?.[1] || params.agentId || 'agt_design_critic';
-        const targetAgent = await getAgent(targetAgentId, env);
-        if (!targetAgent) {
-          return jsonRpcError(rpcId, -32602, `Agent not found: ${targetAgentId}`, corsHeaders, 404);
-        }
 
         let taskId = `a2a_${Date.now()}_${cryptoRandomHex(4)}`;
         if (params.id !== undefined) {
@@ -691,19 +748,29 @@ async function handleWorkerRequest(
           (typeof params.task === 'string' ? params.task : '') ||
           'Execute A2A task';
 
-        const exec = await executeAgentCore(
-          targetAgent,
-          {
-            task: textPart,
-            sessionId: params.sessionId,
-            callerPrincipal: typeof params.user === 'string' ? params.user : undefined,
-            mcpToken: typeof params.mcpToken === 'string' ? params.mcpToken : undefined,
-            reasoningEffort: params.reasoningEffort
-          },
-          request,
-          env,
-          corsHeaders
-        );
+        const a2aRunPayload: RunAgentRequest = {
+          task: textPart,
+          sessionId: params.sessionId,
+          userId: typeof (params.userId || params.user) === 'string' ? (params.userId || params.user) : undefined,
+          userMemory: params.userMemory,
+          mcpToken: typeof params.mcpToken === 'string' ? params.mcpToken : undefined,
+          reasoningEffort: params.reasoningEffort
+        };
+
+        let resolvedAgentId = targetAgentId;
+        let exec: { status: number; headers: Record<string, string>; body: RunAgentResponse | { error: string } };
+        if (targetAgentId === 'auto' || targetAgentId === 'agentwire/auto') {
+          const routed = await routeAndExecuteFleet(a2aRunPayload, request, env, corsHeaders);
+          exec = routed;
+          if (routed.targetAgent) resolvedAgentId = routed.targetAgent.id;
+        } else {
+          const targetAgent = await getAgent(targetAgentId, env);
+          if (!targetAgent) {
+            return jsonRpcError(rpcId, -32602, `Agent not found: ${targetAgentId}`, corsHeaders, 404);
+          }
+          resolvedAgentId = targetAgent.id;
+          exec = await executeAgentCore(targetAgent, a2aRunPayload, request, env, corsHeaders);
+        }
 
         if (exec.status === 401 || exec.status === 403 || exec.status === 429) {
           return jsonRpcError(
@@ -718,7 +785,7 @@ async function handleWorkerRequest(
         const execBody = exec.body as RunAgentResponse;
         const taskRecord: A2ATaskRecord = {
           id: taskId,
-          agentId: targetAgent.id,
+          agentId: resolvedAgentId,
           status: {
             state: exec.status >= 400 ? 'failed' : 'completed',
             timestamp: new Date().toISOString()
@@ -737,6 +804,8 @@ async function handleWorkerRequest(
             runId: execBody.runId,
             traceId: execBody.traceId,
             modelUsed: execBody.modelUsed,
+            intent: execBody.intent,
+            routing: execBody.routing,
             subAgentsCalled: execBody.subAgentsCalled || [],
             durationMs: execBody.durationMs
           }
@@ -790,6 +859,15 @@ async function handleWorkerRequest(
   if (path === '/v1/models' && request.method === 'GET') {
     const agents = await getVisibleDiscoveryAgents(request, env);
     const data = [
+      {
+        id: 'agentwire/auto',
+        agentId: 'auto',
+        slug: 'auto',
+        object: 'model',
+        created: 1740000000,
+        owned_by: 'agent-wire',
+        description: 'Sticky per-user multi-turn intent router across all deployed AgentWire agents'
+      },
       ...agents.map(a => ({
         id: `agentwire/${a.slug}`,
         agentId: a.id,
@@ -814,37 +892,46 @@ async function handleWorkerRequest(
     try {
       const body: any = await readJsonBody(request);
       const requestedModel = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : 'agt_design_critic';
-      const targetAgent = await resolveOpenAiTargetAgent(requestedModel, env);
-      if (!targetAgent) {
-        return jsonResponse(
-          {
-            error: {
-              message: `Model "${requestedModel}" not found.`,
-              type: 'invalid_request_error',
-              code: 'model_not_found'
-            }
-          },
-          corsHeaders,
-          404
-        );
-      }
+      const isAutoRoute = requestedModel === 'auto' || requestedModel === 'agentwire/auto';
 
-      const exec = await executeAgentCore(
-        targetAgent,
-        {
-          messages: body.messages,
-          task: body.prompt,
-          sessionId: typeof (body.session_id || body.sessionId) === 'string' ? (body.session_id || body.sessionId) : undefined,
-          callerPrincipal: typeof body.user === 'string' ? body.user : undefined,
-          mcpToken: typeof (body.mcp_token || body.mcpToken) === 'string' ? (body.mcp_token || body.mcpToken) : undefined,
-          maxTokens: body.max_tokens || body.max_completion_tokens,
-          reasoningEffort: body.reasoning_effort,
-          responseFormat: body.response_format?.type
-        },
-        request,
-        env,
-        corsHeaders
-      );
+      const oaiPayload: RunAgentRequest = {
+        messages: body.messages,
+        task: body.prompt,
+        sessionId: typeof (body.session_id || body.sessionId) === 'string' ? (body.session_id || body.sessionId) : undefined,
+        user: typeof body.user === 'string' ? body.user : undefined,
+        userId: typeof body.userId === 'string' ? body.userId : undefined,
+        userMemory: body.userMemory || body.user_memory,
+        mcpToken: typeof (body.mcp_token || body.mcpToken) === 'string' ? (body.mcp_token || body.mcpToken) : undefined,
+        maxTokens: body.max_tokens || body.max_completion_tokens,
+        reasoningEffort: body.reasoning_effort,
+        responseFormat: body.response_format?.type
+      };
+
+      let resolvedAgentId = requestedModel;
+      let exec: { status: number; headers: Record<string, string>; body: RunAgentResponse | { error: string } };
+
+      if (isAutoRoute) {
+        const routed = await routeAndExecuteFleet(oaiPayload, request, env, corsHeaders);
+        exec = routed;
+        resolvedAgentId = routed.targetAgent?.id || 'agt_design_critic';
+      } else {
+        const targetAgent = await resolveOpenAiTargetAgent(requestedModel, env);
+        if (!targetAgent) {
+          return jsonResponse(
+            {
+              error: {
+                message: `Model "${requestedModel}" not found.`,
+                type: 'invalid_request_error',
+                code: 'model_not_found'
+              }
+            },
+            corsHeaders,
+            404
+          );
+        }
+        resolvedAgentId = targetAgent.id;
+        exec = await executeAgentCore(targetAgent, oaiPayload, request, env, corsHeaders);
+      }
 
       if (exec.status >= 400) {
         return new Response(
@@ -875,14 +962,14 @@ async function handleWorkerRequest(
               id: completionId,
               object: 'chat.completion.chunk',
               created,
-              model: targetAgent.id,
+              model: resolvedAgentId,
               choices: [{ index: 0, delta: { role: 'assistant', content: execBody.result }, finish_reason: null }]
             };
             const chunk2 = {
               id: completionId,
               object: 'chat.completion.chunk',
               created,
-              model: targetAgent.id,
+              model: resolvedAgentId,
               choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
             };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk1)}\n\n`));
@@ -904,7 +991,7 @@ async function handleWorkerRequest(
         id: `chatcmpl_${execBody.runId}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: targetAgent.id,
+        model: resolvedAgentId,
         choices: [
           {
             index: 0,
@@ -925,6 +1012,9 @@ async function handleWorkerRequest(
           traceId: execBody.traceId,
           modelUsed: execBody.modelUsed,
           toolsUsed: execBody.toolsUsed,
+          intent: execBody.intent,
+          routing: execBody.routing,
+          stickyUser: execBody.stickyUser,
           durationMs: execBody.durationMs
         }
       };
@@ -945,20 +1035,7 @@ async function handleWorkerRequest(
     try {
       const body: any = await readJsonBody(request);
       const requestedModel = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : 'agt_design_critic';
-      const targetAgent = await resolveOpenAiTargetAgent(requestedModel, env);
-      if (!targetAgent) {
-        return jsonResponse(
-          {
-            error: {
-              message: `Model "${requestedModel}" not found.`,
-              type: 'invalid_request_error',
-              code: 'model_not_found'
-            }
-          },
-          corsHeaders,
-          404
-        );
-      }
+      const isAutoRoute = requestedModel === 'auto' || requestedModel === 'agentwire/auto';
 
       let inputStr = 'Hello';
       if (typeof body.input === 'string') {
@@ -967,20 +1044,41 @@ async function handleWorkerRequest(
         inputStr = body.input.map((i: any) => (typeof i === 'string' ? i : i?.content || i?.text || '')).join('\n');
       }
 
-      const exec = await executeAgentCore(
-        targetAgent,
-        {
-          task: inputStr,
-          sessionId: typeof (body.session_id || body.sessionId) === 'string' ? (body.session_id || body.sessionId) : undefined,
-          callerPrincipal: typeof body.user === 'string' ? body.user : undefined,
-          mcpToken: typeof (body.mcp_token || body.mcpToken) === 'string' ? (body.mcp_token || body.mcpToken) : undefined,
-          reasoningEffort: body.reasoning?.effort,
-          maxTokens: body.max_output_tokens
-        },
-        request,
-        env,
-        corsHeaders
-      );
+      const respReqPayload: RunAgentRequest = {
+        task: inputStr,
+        sessionId: typeof (body.session_id || body.sessionId) === 'string' ? (body.session_id || body.sessionId) : undefined,
+        user: typeof body.user === 'string' ? body.user : undefined,
+        userId: typeof body.userId === 'string' ? body.userId : undefined,
+        userMemory: body.userMemory || body.user_memory,
+        mcpToken: typeof (body.mcp_token || body.mcpToken) === 'string' ? (body.mcp_token || body.mcpToken) : undefined,
+        reasoningEffort: body.reasoning?.effort,
+        maxTokens: body.max_output_tokens
+      };
+
+      let resolvedAgentId = requestedModel;
+      let exec: { status: number; headers: Record<string, string>; body: RunAgentResponse | { error: string } };
+      if (isAutoRoute) {
+        const routed = await routeAndExecuteFleet(respReqPayload, request, env, corsHeaders);
+        exec = routed;
+        resolvedAgentId = routed.targetAgent?.id || 'agt_design_critic';
+      } else {
+        const targetAgent = await resolveOpenAiTargetAgent(requestedModel, env);
+        if (!targetAgent) {
+          return jsonResponse(
+            {
+              error: {
+                message: `Model "${requestedModel}" not found.`,
+                type: 'invalid_request_error',
+                code: 'model_not_found'
+              }
+            },
+            corsHeaders,
+            404
+          );
+        }
+        resolvedAgentId = targetAgent.id;
+        exec = await executeAgentCore(targetAgent, respReqPayload, request, env, corsHeaders);
+      }
 
       if (exec.status >= 400) {
         return new Response(
@@ -1005,7 +1103,7 @@ async function handleWorkerRequest(
         object: 'response',
         created_at: Math.floor(Date.now() / 1000),
         status: 'completed',
-        model: targetAgent.id,
+        model: resolvedAgentId,
         output_text: execBody.result,
         output: [
           {
@@ -1030,6 +1128,9 @@ async function handleWorkerRequest(
         agentwire_meta: {
           runId: execBody.runId,
           traceId: execBody.traceId,
+          intent: execBody.intent,
+          routing: execBody.routing,
+          stickyUser: execBody.stickyUser,
           steps: execBody.steps
         }
       };
@@ -1113,6 +1214,7 @@ async function handleWorkerRequest(
           redactPii: true,
           maxToolSteps: 5
         },
+        intents: Array.isArray(body.intents) ? body.intents : undefined,
         subAgents: body.subAgents || [],
         mcps: body.mcps || [],
         skills: normalizedSkills,
@@ -1441,6 +1543,127 @@ async function handleWorkerRequest(
     }
   }
 
+  // 6b. PRE-LLM FAST INTENT CLASSIFIER & SLOT PROBE: POST /api/intent
+  if (path === '/api/intent' && request.method === 'POST') {
+    try {
+      const body: any = await readJsonBody(request);
+      const task = String(body.input || body.task || body.prompt || '').trim();
+      if (!task) {
+        return jsonResponse({ error: 'Provide a non-empty "task" or "input" string to classify.' }, corsHeaders, 400);
+      }
+
+      if (typeof body.agentId === 'string' && body.agentId && body.agentId !== 'auto') {
+        const targetAgent = await getAgent(body.agentId, env);
+        if (!targetAgent) {
+          return jsonResponse({ error: `Agent "${body.agentId}" not found.` }, corsHeaders, 404);
+        }
+        if (!(await authorizePrivateAgent(targetAgent, request, env))) {
+          return unauthorizedPrivateAgentResponse(corsHeaders);
+        }
+        const cls = classifyIntentForAgent({
+          agent: targetAgent,
+          task,
+          hasPriorContext: Boolean(body.hasPriorContext),
+          seedMemory: body.memory
+        });
+        return jsonResponse(
+          {
+            ...cls.intent,
+            targetAgentId: targetAgent.id,
+            targetAgentSlug: targetAgent.slug,
+            clarificationPrompt: cls.clarificationMessage
+          },
+          corsHeaders
+        );
+      }
+
+      const agents = await getVisibleDiscoveryAgents(request, env);
+      const routed = routeAcrossFleet({ agents, task });
+      return jsonResponse(
+        {
+          ...routed.intentPreview,
+          targetAgentId: routed.agent.id,
+          targetAgentSlug: routed.agent.slug,
+          confidence: Math.max(routed.routing.confidence, routed.intentPreview.confidence),
+          routing: routed.routing
+        },
+        corsHeaders
+      );
+    } catch (err: any) {
+      if (err instanceof PayloadTooLargeError) {
+        return jsonResponse({ error: err.message }, corsHeaders, 413);
+      }
+      return jsonResponse({ error: 'Invalid JSON payload for /api/intent.' }, corsHeaders, 400);
+    }
+  }
+
+  // 6c. STICKY MULTI-TURN FLEET INTENT ROUTER: POST /api/route
+  if (path === '/api/route' && request.method === 'POST') {
+    let payload: RunAgentRequest = { task: '' };
+    try {
+      payload = await readJsonBody<RunAgentRequest>(request);
+    } catch (err: any) {
+      if (err instanceof PayloadTooLargeError) {
+        return jsonResponse({ error: err.message }, corsHeaders, 413);
+      }
+    }
+    const exec = await routeAndExecuteFleet(payload, request, env, corsHeaders);
+    return new Response(JSON.stringify(exec.body, null, 2), {
+      status: exec.status,
+      headers: exec.headers
+    });
+  }
+
+  // 6d. PER-USER STICKY DURABLE OBJECT STATE: GET / PUT / DELETE /api/users/:userId/state
+  const userStateMatch = path.match(/^\/api\/users\/([a-zA-Z0-9_.@:-]{1,128})\/state$/);
+  if (userStateMatch) {
+    const targetUserId = decodeURIComponent(userStateMatch[1]);
+    const { callerPrincipal, explicitUserId, callerPrincipalHash } = await computeCallerPrincipalHash(request, env);
+    const activeCallerId = explicitUserId || callerPrincipal;
+
+    if (!callerPrincipalHash || (activeCallerId && activeCallerId !== targetUserId)) {
+      return jsonResponse(
+        { error: 'Forbidden: Caller identity does not match requested user state.' },
+        corsHeaders,
+        403
+      );
+    }
+
+    if (request.method === 'GET') {
+      const inspected = await callUserStateDo(targetUserId, env, {
+        op: 'inspect',
+        principalHash: callerPrincipalHash
+      });
+      return jsonResponse(inspected.data, corsHeaders, inspected.status);
+    }
+
+    if (request.method === 'PUT' || request.method === 'POST') {
+      try {
+        const body: any = await readJsonBody(request);
+        const patched = await callUserStateDo(targetUserId, env, {
+          op: 'patch_profile',
+          principalHash: callerPrincipalHash,
+          userMemory: body.userMemory || body.memory || {},
+          activeAgentId: body.activeAgentId
+        });
+        return jsonResponse(patched.data, corsHeaders, patched.status);
+      } catch (err: any) {
+        if (err instanceof PayloadTooLargeError) {
+          return jsonResponse({ error: err.message }, corsHeaders, 413);
+        }
+        return jsonResponse({ error: 'Invalid JSON payload for user state update.' }, corsHeaders, 400);
+      }
+    }
+
+    if (request.method === 'DELETE') {
+      const reset = await callUserStateDo(targetUserId, env, {
+        op: 'reset',
+        principalHash: callerPrincipalHash
+      });
+      return jsonResponse(reset.data, corsHeaders, reset.status);
+    }
+  }
+
   // 7. THE MAIN CURLABLE RUNNER: POST /api/agents/:id/run (Supports JSON & Real-Time SSE Streaming)
   const runMatch = path.match(/^\/api\/agents\/([a-zA-Z0-9_-]+)\/run$/);
   if (runMatch && request.method === 'POST') {
@@ -1581,9 +1804,9 @@ export default {
       'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers':
-        'Content-Type, Accept, Authorization, X-Request-Id, X-Admin-Secret, X-OpenRouter-Key, X-Agent-Key, X-AgentWire-Key, X-Session-ID, X-AgentWire-Session-Id, X-MCP-Authorization, X-MCP-Token, traceparent',
+        'Content-Type, Accept, Authorization, X-Request-Id, X-Admin-Secret, X-OpenRouter-Key, X-Agent-Key, X-AgentWire-Key, X-Session-ID, X-AgentWire-Session-Id, X-User-ID, X-AgentWire-User, X-MCP-Authorization, X-MCP-Token, X-MCP-Principal, traceparent',
       'Access-Control-Expose-Headers':
-        'X-Request-Id, X-AgentWire-Run-Id, X-AgentWire-Trace-Id, X-AgentWire-Duration-Ms, X-AgentWire-Session-Id, X-RateLimit-Limit, X-RateLimit-Remaining, traceparent',
+        'X-Request-Id, X-AgentWire-Run-Id, X-AgentWire-Trace-Id, X-AgentWire-Intent, X-AgentWire-User, X-AgentWire-Duration-Ms, X-AgentWire-Session-Id, X-RateLimit-Limit, X-RateLimit-Remaining, traceparent',
       'X-Request-Id': requestId,
       traceparent,
       Link: AGENT_DISCOVERY_LINK_HEADER,

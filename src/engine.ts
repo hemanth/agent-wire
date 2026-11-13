@@ -7,7 +7,10 @@ import type {
   AgentRunRecord,
   AgentEvalCase,
   AgentEvalCaseResult,
-  AgentEvalSuiteResponse
+  AgentEvalSuiteResponse,
+  AgentSession,
+  UserProfileState,
+  AgentRoutingSummary
 } from './types.ts';
 import {
   type Env,
@@ -20,12 +23,15 @@ import {
   getSession,
   saveSession,
   getAgent,
+  listAgents,
   saveAgent,
   saveRunRecord
 } from './store.ts';
 import { logStructured, scrubSecrets } from './telemetry.ts';
 import { evaluateFeatureFlags } from './flags.ts';
 import { sha256Hex } from './protocols.ts';
+import { callUserStateDo } from './user-do.ts';
+import { classifyIntentForAgent, routeAcrossFleet, validateAgentIntents } from './intent.ts';
 
 const ALLOWED_REMOTE_PORTS = new Set(['', '80', '443', '8080', '8443']);
 const FORBIDDEN_MCP_HEADERS = new Set([
@@ -295,6 +301,12 @@ export function validateAgentInput(body: any): { valid: boolean; error?: string 
       }
     }
   }
+  if (body.intents !== undefined) {
+    const intentCheck = validateAgentIntents(body.intents);
+    if (!intentCheck.valid) {
+      return intentCheck;
+    }
+  }
   return { valid: true };
 }
 
@@ -548,6 +560,7 @@ function buildSandboxSimulationOutput(params: {
   guardrailsTriggered: string[];
   subAgentsCalled: string[];
   session: { id: string; messages: Array<{ role: string; content: string }>; memory: Record<string, any> } | null;
+  userMemory?: Record<string, any>;
 }): { finalResult: string; structuredOutput?: Record<string, unknown> } {
   const {
     agent,
@@ -558,13 +571,18 @@ function buildSandboxSimulationOutput(params: {
     toolDescriptions,
     guardrailsTriggered,
     subAgentsCalled,
-    session
+    session,
+    userMemory
   } = params;
 
   const guardrailNote =
     guardrailsTriggered.length > 0 ? `\nGuardrail Shield Active: ${guardrailsTriggered.join(', ')}` : '';
   const subAgentNote =
     subAgentsCalled.length > 0 ? `\nA2A Sub-Agent Delegation: ${subAgentsCalled.join(', ')}` : '';
+  const userMemLine =
+    userMemory && Object.keys(userMemory).length > 0
+      ? `Sticky User Profile: ${JSON.stringify(userMemory)}\n`
+      : '';
 
   if (effectiveResponseFormat === 'json_object' || effectiveResponseFormat === 'json_schema') {
     const jsonObj = {
@@ -577,7 +595,8 @@ function buildSandboxSimulationOutput(params: {
       mcpToolsAvailable: toolDescriptions.map(t => t.name),
       guardrailsTriggered,
       subAgentsCalled,
-      memory: session?.memory || {}
+      memory: session?.memory || {},
+      ...(userMemory && Object.keys(userMemory).length > 0 ? { userMemory } : {})
     };
     return {
       structuredOutput: jsonObj,
@@ -590,13 +609,13 @@ function buildSandboxSimulationOutput(params: {
     const priorSummary = session.messages.map(m => `[${m.role}]: ${m.content}`).join(' | ');
     const historyLine = priorSummary ? `Conversation History: ${priorSummary}\n` : '';
     return {
-      finalResult: `[AgentWire Sandbox Simulation — Session: ${session.id}]\n\nExecution Summary: I am ${agent.name}.\nSystem persona, session history (${priorCount} prior messages), and working memory (${Object.keys(session.memory).length} keys) loaded.${guardrailNote}${subAgentNote}\n\nWorking Memory: ${JSON.stringify(session.memory)}\n${historyLine}Task received: "${task}".\n(Multi-turn context preserved across turns).`
+      finalResult: `[AgentWire Sandbox Simulation — Session: ${session.id}]\n\nExecution Summary: I am ${agent.name}.\nSystem persona, session history (${priorCount} prior messages), and working memory (${Object.keys(session.memory).length} keys) loaded.${guardrailNote}${subAgentNote}\n\nWorking Memory: ${JSON.stringify(session.memory)}\n${userMemLine}${historyLine}Task received: "${task}".\n(Multi-turn context preserved across turns).`
     };
   }
 
   const toolsSummary = toolDescriptions.map(t => `- ${t.name}: ${t.description}`).join('\n') || 'None';
   return {
-    finalResult: `[AgentWire Sandbox Simulation — No OpenRouter Key provided]\n\nExecution Summary: I am ${agent.name}.\nSystem persona and ${enabledSkills.length} skills loaded successfully.${guardrailNote}${subAgentNote}\n\nConnected MCP tools:\n${toolsSummary}\n\nTask received: "${task}".\nTo enable full multi-model live generation, connect your key via "Sign in with OpenRouter" or supply -H "Authorization: Bearer <key>".`
+    finalResult: `[AgentWire Sandbox Simulation — No OpenRouter Key provided]\n\nExecution Summary: I am ${agent.name}.\nSystem persona and ${enabledSkills.length} skills loaded successfully.${guardrailNote}${subAgentNote}\n${userMemLine ? `\n${userMemLine}` : ''}\nConnected MCP tools:\n${toolsSummary}\n\nTask received: "${task}".\nTo enable full multi-model live generation, connect your key via "Sign in with OpenRouter" or supply -H "Authorization: Bearer <key>".`
   };
 }
 
@@ -606,7 +625,13 @@ export async function computeCallerPrincipalHash(
   request: Request,
   env: Env,
   payload?: Partial<RunAgentRequest>
-): Promise<{ requestMcpAuth: string; callerPrincipal: string; callerPrincipalHash?: string }> {
+): Promise<{
+  requestMcpAuth: string;
+  callerPrincipal: string;
+  explicitUserId: string;
+  shouldAutoStickUser: boolean;
+  callerPrincipalHash?: string;
+}> {
   const rawMcpAuth =
     request.headers.get('X-MCP-Authorization') ||
     request.headers.get('X-MCP-Token') ||
@@ -615,7 +640,16 @@ export async function computeCallerPrincipalHash(
     '';
   const requestMcpAuth = rawMcpAuth.replace(/[\r\n]/g, '').slice(0, 2048);
 
+  const rawExplicitUser =
+    request.headers.get('X-User-ID') ||
+    request.headers.get('X-AgentWire-User') ||
+    (payload && typeof payload.userId === 'string' ? payload.userId : '') ||
+    (payload && typeof payload.user === 'string' ? payload.user : '') ||
+    '';
+  const explicitUserId = rawExplicitUser.replace(/[^a-zA-Z0-9_.@:-]/g, '').trim().slice(0, 128);
+
   const rawPrincipal =
+    explicitUserId ||
     request.headers.get('X-MCP-Principal') ||
     request.headers.get('X-Forwarded-User') ||
     (payload && typeof payload.callerPrincipal === 'string' ? payload.callerPrincipal : '') ||
@@ -634,7 +668,12 @@ export async function computeCallerPrincipalHash(
   ].filter(Boolean);
 
   const callerPrincipalHash = principalParts.length > 0 ? await sha256Hex(principalParts.join('|')) : undefined;
-  return { requestMcpAuth, callerPrincipal, callerPrincipalHash };
+  const shouldAutoStickUser =
+    payload?.stickyUser === false
+      ? false
+      : Boolean(explicitUserId || (payload?.stickyUser === true && (callerPrincipal || callerPrincipalHash)));
+
+  return { requestMcpAuth, callerPrincipal, explicitUserId, shouldAutoStickUser, callerPrincipalHash };
 }
 
 export async function executeAgentCore(
@@ -643,7 +682,8 @@ export async function executeAgentCore(
   request: Request,
   env: Env,
   corsHeaders: Record<string, string>,
-  depth = 0
+  depth = 0,
+  precomputedRouting?: AgentRoutingSummary
 ): Promise<{ status: number; headers: Record<string, string>; body: RunAgentResponse | { error: string } }> {
   const startTime = Date.now();
   const url = new URL(request.url);
@@ -724,7 +764,7 @@ export async function executeAgentCore(
     return check.sanitizedTask;
   };
 
-  const task = applyGuardrailPass(rawTask);
+  let task = applyGuardrailPass(rawTask);
   const sanitizedCallerMessages = safeCallerMessages.map(m =>
     m.role === 'user' ? { role: m.role, content: applyGuardrailPass(m.content) } : m
   );
@@ -734,6 +774,14 @@ export async function executeAgentCore(
     const scrubbedMem = applyGuardrailPass(JSON.stringify(safeMemoryPatch));
     try {
       safeMemoryPatch = JSON.parse(scrubbedMem);
+    } catch {}
+  }
+
+  let safeUserMemoryPatch = sanitizePlainObject(payload.userMemory);
+  if (safeUserMemoryPatch && flags.strictGuardrails) {
+    const scrubbedUserMem = applyGuardrailPass(JSON.stringify(safeUserMemoryPatch));
+    try {
+      safeUserMemoryPatch = JSON.parse(scrubbedUserMem);
     } catch {}
   }
 
@@ -755,26 +803,62 @@ export async function executeAgentCore(
     });
   }
 
-  // Caller-scoped MCP identity & principal resolution (never persisted in agent or session state)
-  const { requestMcpAuth, callerPrincipal, callerPrincipalHash } = await computeCallerPrincipalHash(
-    request,
-    env,
-    payload
-  );
+  // Caller-scoped MCP identity, sticky user ID & principal resolution
+  const {
+    requestMcpAuth,
+    callerPrincipal,
+    explicitUserId,
+    shouldAutoStickUser,
+    callerPrincipalHash
+  } = await computeCallerPrincipalHash(request, env, payload);
 
-  // Session, Memory & Context resolution (with principal-bound session isolation)
+  const stickyUserId =
+    shouldAutoStickUser
+      ? explicitUserId || callerPrincipal || (callerPrincipalHash ? `usr_${callerPrincipalHash.slice(0, 12)}` : '')
+      : '';
+
+  // Session, Per-User Durable Object Stickiness & Memory resolution
   const candidateSessionId =
     payload.sessionId ||
     request.headers.get('X-Session-ID') ||
     request.headers.get('X-AgentWire-Session-Id') ||
     undefined;
-  const sessionId =
+  const explicitSessionId =
     typeof candidateSessionId === 'string' && /^[a-zA-Z0-9_:-]{1,128}$/.test(candidateSessionId)
       ? candidateSessionId
       : undefined;
 
-  let session = sessionId ? await getSession(agent.id, sessionId, env) : null;
-  if (sessionId) {
+  const autoBoundSession = Boolean(!explicitSessionId && stickyUserId && callerPrincipalHash);
+  const sessionId =
+    explicitSessionId || (autoBoundSession && callerPrincipalHash ? `usr_${callerPrincipalHash.slice(0, 16)}` : undefined);
+
+  let session: AgentSession | null = null;
+  let userProfile: UserProfileState | null = null;
+
+  if (stickyUserId && callerPrincipalHash) {
+    const acq = await callUserStateDo<{ profile?: UserProfileState; session?: AgentSession; error?: string }>(
+      stickyUserId,
+      env,
+      {
+        op: 'acquire',
+        principalHash: callerPrincipalHash,
+        agentId: agent.id,
+        sessionId: sessionId || '',
+        userMemoryPatch: safeUserMemoryPatch || {},
+        sessionMemoryPatch: safeMemoryPatch || {}
+      }
+    );
+    if (acq.status === 403) {
+      return {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', traceparent, ...corsHeaders },
+        body: { error: acq.data?.error || 'Forbidden: User state is bound to a different caller identity.' }
+      };
+    }
+    userProfile = acq.data?.profile || null;
+    session = acq.data?.session || null;
+  } else if (sessionId) {
+    session = await getSession(agent.id, sessionId, env);
     if (!session) {
       session = {
         id: sessionId,
@@ -807,7 +891,119 @@ export async function executeAgentCore(
     }
   }
 
-  // Step 1: Ingest Skills, Memory, Context and Persona into System Prompt
+  // Step 0.5: Pre-LLM Intent Classification & Multi-Turn Slot Validation
+  const intentStart = Date.now();
+  const hasPriorContext = Boolean((session && session.messages.length > 0) || sanitizedCallerMessages.length > 0);
+  const pendingForAgent = userProfile?.pendingIntents?.[agent.id] || (session?.memory?.__pendingIntent as any);
+  const combinedSeedMemory = {
+    ...(userProfile?.userMemory || {}),
+    ...(session?.memory || {})
+  };
+  delete (combinedSeedMemory as any).__pendingIntent;
+
+  const intentOutcome = classifyIntentForAgent({
+    agent,
+    task,
+    hasPriorContext,
+    pendingIntent: pendingForAgent,
+    seedMemory: combinedSeedMemory
+  });
+  const detectedIntent = intentOutcome.intent;
+
+  steps.push({
+    step: steps.length + 1,
+    type: 'intent',
+    timestamp: new Date().toISOString(),
+    durationMs: Math.max(1, Date.now() - intentStart),
+    content: `Intent "${detectedIntent.id}" (${Math.round(detectedIntent.confidence * 100)}%, action=${detectedIntent.action}${detectedIntent.isFollowUp ? ', follow-up' : ''}${Object.keys(detectedIntent.slots).length > 0 ? `, slots=${JSON.stringify(detectedIntent.slots)}` : ''}${detectedIntent.missingSlots.length > 0 ? `, missing=[${detectedIntent.missingSlots.join(', ')}]` : ''}).`
+  });
+
+  // Short-circuit BEFORE calling OpenRouter when required intent slots are missing
+  if (detectedIntent.action === 'clarify' && intentOutcome.clarificationMessage) {
+    const clarifyText = intentOutcome.clarificationMessage;
+    steps.push({
+      step: steps.length + 1,
+      type: 'answer',
+      timestamp: new Date().toISOString(),
+      durationMs: 1,
+      content: clarifyText
+    });
+
+    if (stickyUserId && callerPrincipalHash) {
+      const committed = await callUserStateDo<{ profile: UserProfileState; session?: AgentSession }>(stickyUserId, env, {
+        op: 'commit',
+        principalHash: callerPrincipalHash,
+        agentId: agent.id,
+        sessionId: session?.id || '',
+        pendingIntent: intentOutcome.nextPendingIntent,
+        userMessage: task,
+        assistantMessage: clarifyText
+      });
+      userProfile = committed.data.profile;
+      if (committed.data.session) session = committed.data.session;
+    } else if (session) {
+      session.memory = { ...session.memory, __pendingIntent: intentOutcome.nextPendingIntent };
+      session.messages.push({ role: 'user', content: task, timestamp: new Date().toISOString() });
+      session.messages.push({ role: 'assistant', content: clarifyText, timestamp: new Date().toISOString() });
+      session.runsCount = (session.runsCount || 0) + 1;
+      session.updatedAt = new Date().toISOString();
+      await saveSession(session, env);
+    }
+
+    const durationMs = Date.now() - startTime;
+    const clarifyBody: RunAgentResponse = {
+      runId,
+      traceId,
+      agentId: agent.id,
+      task,
+      result: clarifyText,
+      status: 'needs_input',
+      modelUsed: 'intent-router/edge',
+      toolsUsed: [],
+      guardrailsTriggered: guardrailsTriggered.length > 0 ? guardrailsTriggered : undefined,
+      intent: detectedIntent,
+      routing: precomputedRouting,
+      stickyUser:
+        stickyUserId && userProfile
+          ? {
+              userId: stickyUserId,
+              sessionId: session?.id || '',
+              autoBound: autoBoundSession,
+              totalRuns: userProfile.totalRuns,
+              activeAgentId: userProfile.activeAgentId,
+              userMemory: userProfile.userMemory
+            }
+          : undefined,
+      steps,
+      tokens: { prompt: 0, completion: 0, reasoning: 0, total: 0 },
+      estimatedCostUsd: 0,
+      durationMs,
+      sessionId: session?.id,
+      sessionMessagesCount: session?.messages.length,
+      memory: session?.memory
+    };
+
+    const clarifyHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-AgentWire-Run-Id': runId,
+      'X-AgentWire-Trace-Id': traceId,
+      'X-AgentWire-Intent': detectedIntent.id,
+      'X-AgentWire-Duration-Ms': String(durationMs),
+      'X-RateLimit-Limit': '60',
+      'X-RateLimit-Remaining': String(rateCheck.remaining),
+      traceparent,
+      ...corsHeaders
+    };
+    if (session) clarifyHeaders['X-AgentWire-Session-Id'] = session.id;
+    if (stickyUserId) clarifyHeaders['X-AgentWire-User'] = stickyUserId;
+
+    await saveRunRecord(agent.id, { ...clarifyBody, createdAt: new Date().toISOString() }, env);
+    return { status: 200, headers: clarifyHeaders, body: clarifyBody };
+  }
+
+  task = intentOutcome.effectiveTask;
+
+  // Step 1: Ingest Skills, Sticky User Profile, Intent Slots, Memory, Context and Persona into System Prompt
   const step1Start = Date.now();
   let fullSystemPrompt = (agent.systemPrompt || '').trim();
   const enabledSkills = (agent.skills || []).filter(s => s && s.enabled !== false);
@@ -818,8 +1014,22 @@ export async function executeAgentCore(
     }
   }
 
+  if (userProfile && userProfile.userMemory && Object.keys(userProfile.userMemory).length > 0) {
+    fullSystemPrompt +=
+      `\n\n=== STICKY USER PROFILE (USER: ${stickyUserId}) ===\n` + JSON.stringify(userProfile.userMemory, null, 2);
+  }
+
+  if (Object.keys(detectedIntent.slots).length > 0) {
+    fullSystemPrompt +=
+      `\n\n=== DETECTED CALLER INTENT & SLOTS (${detectedIntent.id}) ===\n` + JSON.stringify(detectedIntent.slots, null, 2);
+  }
+
   if (session && session.memory && Object.keys(session.memory).length > 0) {
-    fullSystemPrompt += '\n\n=== AGENT WORKING MEMORY (PERSISTENT STATE) ===\n' + JSON.stringify(session.memory, null, 2);
+    const cleanSessionMem = { ...session.memory };
+    delete (cleanSessionMem as any).__pendingIntent;
+    if (Object.keys(cleanSessionMem).length > 0) {
+      fullSystemPrompt += '\n\n=== AGENT WORKING MEMORY (PERSISTENT STATE) ===\n' + JSON.stringify(cleanSessionMem, null, 2);
+    }
   }
 
   if (safeCallContext && Object.keys(safeCallContext).length > 0) {
@@ -838,7 +1048,7 @@ export async function executeAgentCore(
     type: 'thought',
     timestamp: new Date().toISOString(),
     durationMs: Date.now() - step1Start,
-    content: `Agent initialized with system persona, ${enabledSkills.length} active skills, reasoningEffort="${effectiveReasoningEffort}"${session ? `, session "${session.id}" (${session.messages.length} prior messages), and working memory (${Object.keys(session.memory || {}).length} keys)` : ''}.`
+    content: `Agent initialized with system persona, ${enabledSkills.length} active skills, reasoningEffort="${effectiveReasoningEffort}"${stickyUserId ? `, stickyUser="${stickyUserId}"` : ''}${session ? `, session "${session.id}" (${session.messages.length} prior messages), and working memory (${Object.keys(session.memory || {}).length} keys)` : ''}.`
   });
 
   // Step 2: Discover and aggregate tools from configured MCP servers + Sub-Agent handoffs
@@ -1159,7 +1369,8 @@ export async function executeAgentCore(
       })),
       guardrailsTriggered,
       subAgentsCalled,
-      session
+      session,
+      userMemory: userProfile?.userMemory
     });
     finalResult = sandboxSim.finalResult;
     structuredOutput = sandboxSim.structuredOutput;
@@ -1199,8 +1410,29 @@ export async function executeAgentCore(
   agent.lastInvokedAt = new Date().toISOString();
   await saveAgent(agent, env);
 
-  // Persist session conversation history and memory
-  if (session) {
+  // Persist sticky per-user Durable Object state and/or session conversation history
+  if (stickyUserId && callerPrincipalHash) {
+    const committed = await callUserStateDo<{ profile: UserProfileState; session?: AgentSession }>(stickyUserId, env, {
+      op: 'commit',
+      principalHash: callerPrincipalHash,
+      agentId: agent.id,
+      sessionId: session?.id || '',
+      userMemoryPatch: safeUserMemoryPatch || {},
+      sessionMemoryPatch: safeMemoryPatch || {},
+      pendingIntent: null,
+      userMessage: task,
+      assistantMessage: finalResult
+    });
+    userProfile = committed.data.profile;
+    if (committed.data.session) {
+      session = committed.data.session;
+    }
+  } else if (session) {
+    if ((session.memory as any)?.__pendingIntent) {
+      const cleaned = { ...session.memory };
+      delete (cleaned as any).__pendingIntent;
+      session.memory = cleaned;
+    }
     session.messages.push({
       role: 'user',
       content: task,
@@ -1219,6 +1451,11 @@ export async function executeAgentCore(
     await saveSession(session, env);
   }
 
+  const publicSessionMem = session?.memory ? { ...session.memory } : undefined;
+  if (publicSessionMem && '__pendingIntent' in publicSessionMem) {
+    delete (publicSessionMem as any).__pendingIntent;
+  }
+
   const responseBody: RunAgentResponse = {
     runId,
     traceId,
@@ -1233,13 +1470,26 @@ export async function executeAgentCore(
     toolsUsed,
     subAgentsCalled: subAgentsCalled.length > 0 ? subAgentsCalled : undefined,
     guardrailsTriggered: guardrailsTriggered.length > 0 ? guardrailsTriggered : undefined,
+    intent: detectedIntent,
+    routing: precomputedRouting,
+    stickyUser:
+      stickyUserId && userProfile
+        ? {
+            userId: stickyUserId,
+            sessionId: session?.id || '',
+            autoBound: autoBoundSession,
+            totalRuns: userProfile.totalRuns,
+            activeAgentId: userProfile.activeAgentId,
+            userMemory: userProfile.userMemory
+          }
+        : undefined,
     steps,
     tokens: tokensUsage,
     estimatedCostUsd,
     durationMs,
     sessionId: session?.id,
     sessionMessagesCount: session?.messages.length,
-    memory: session?.memory
+    memory: publicSessionMem
   };
 
   const runRecord: AgentRunRecord = {
@@ -1252,6 +1502,7 @@ export async function executeAgentCore(
     'Content-Type': 'application/json',
     'X-AgentWire-Run-Id': runId,
     'X-AgentWire-Trace-Id': traceId,
+    'X-AgentWire-Intent': detectedIntent.id,
     'X-AgentWire-Duration-Ms': String(durationMs),
     'X-RateLimit-Limit': '60',
     'X-RateLimit-Remaining': String(rateCheck.remaining),
@@ -1261,8 +1512,73 @@ export async function executeAgentCore(
   if (session) {
     responseHeaders['X-AgentWire-Session-Id'] = session.id;
   }
+  if (stickyUserId) {
+    responseHeaders['X-AgentWire-User'] = stickyUserId;
+  }
 
   return { status: 200, headers: responseHeaders, body: responseBody };
+}
+
+export async function routeAndExecuteFleet(
+  payload: RunAgentRequest,
+  request: Request,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<{ status: number; headers: Record<string, string>; body: RunAgentResponse | { error: string }; targetAgent?: Agent }> {
+  const wireKeyCandidate = extractWireKey(request);
+  const validWireKey = wireKeyCandidate ? await validateApiKey(wireKeyCandidate, env) : null;
+  const allAgents = await listAgents(env);
+  const visibleAgents = validWireKey ? allAgents : allAgents.filter(a => a.visibility !== 'private');
+
+  if (visibleAgents.length === 0) {
+    return {
+      status: 404,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      body: { error: 'No callable agents available in fleet.' }
+    };
+  }
+
+  const explicitTaskInput =
+    coerceContentToString(payload.input) ||
+    coerceContentToString(payload.task) ||
+    coerceContentToString(payload.prompt);
+  const rawMessages = Array.isArray(payload.messages) ? payload.messages.slice(-40) : [];
+  const lastMsg = [...rawMessages].reverse().find(m => m && m.role === 'user');
+  const task = explicitTaskInput || coerceContentToString(lastMsg?.content) || 'Hello!';
+
+  const { callerPrincipal, explicitUserId, shouldAutoStickUser, callerPrincipalHash } =
+    await computeCallerPrincipalHash(request, env, payload);
+  const stickyUserId =
+    shouldAutoStickUser
+      ? explicitUserId || callerPrincipal || (callerPrincipalHash ? `usr_${callerPrincipalHash.slice(0, 12)}` : '')
+      : '';
+
+  let userProfile: UserProfileState | null = null;
+  if (stickyUserId && callerPrincipalHash) {
+    const inspected = await callUserStateDo<UserProfileState & { error?: string }>(stickyUserId, env, {
+      op: 'inspect',
+      principalHash: callerPrincipalHash
+    });
+    if (inspected.status === 403) {
+      return {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        body: { error: inspected.data?.error || 'Forbidden: User state is bound to a different caller identity.' }
+      };
+    }
+    if (inspected.status === 200 && inspected.data?.createdAt) {
+      userProfile = { ...inspected.data, principalHash: callerPrincipalHash };
+    }
+  }
+
+  const routed = routeAcrossFleet({
+    agents: visibleAgents,
+    task,
+    userProfile
+  });
+
+  const exec = await executeAgentCore(routed.agent, payload, request, env, corsHeaders, 0, routed.routing);
+  return { ...exec, targetAgent: routed.agent };
 }
 
 // Built-in Evaluation Runner used by REST /api/agents/:id/eval and MCP eval_agent

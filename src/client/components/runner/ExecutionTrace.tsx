@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Check, Zap, ShieldCheck, Network } from 'lucide-react';
+import { Terminal, Check, Zap, ShieldCheck, Network, Compass } from 'lucide-react';
 import { ToolExecutionStep } from '../../../types.ts';
 
 interface ExecutionTraceProps {
@@ -36,6 +36,15 @@ export const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ steps }) => {
                 <p className="text-zinc-600 italic leading-relaxed">
                   {step.content}
                 </p>
+              )}
+              {step.type === 'intent' && (
+                <div className="text-zinc-900 flex items-start gap-1.5 break-words">
+                  <Compass className="w-3.5 h-3.5 shrink-0 mt-0.5 text-zinc-700" aria-hidden="true" />
+                  <div>
+                    <span className="font-bold text-zinc-900">Pre-LLM Intent Router:</span>{' '}
+                    <span className="text-zinc-700">{step.content}</span>
+                  </div>
+                </div>
               )}
               {step.type === 'guardrail' && (
                 <div className="text-amber-900 flex items-start gap-1.5 break-words">

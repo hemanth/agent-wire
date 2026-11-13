@@ -9,6 +9,7 @@ interface CurlSnippetProps {
   origin?: string;
   task?: string;
   sessionId?: string;
+  userId?: string;
   memory?: Record<string, any>;
 }
 
@@ -19,6 +20,7 @@ export const CurlSnippet: React.FC<CurlSnippetProps> = ({
   origin = getPublicBaseUrl(),
   task = 'Analyze this repository for security regressions and report findings.',
   sessionId,
+  userId,
   memory
 }) => {
   const [copied, setCopied] = useState(false);
@@ -26,16 +28,34 @@ export const CurlSnippet: React.FC<CurlSnippetProps> = ({
 
   const safeAgentId = encodeURIComponent(agentId.replace(/[^a-zA-Z0-9_-]/g, ''));
   const safeSessionId = sessionId ? sessionId.replace(/[^a-zA-Z0-9_:-]/g, '') : undefined;
+  const safeUserId = userId ? userId.replace(/[^a-zA-Z0-9_.@:-]/g, '') : undefined;
   const endpointUrl = `${origin}/api/agents/${safeAgentId}/run`;
   const hasMemory = memory && Object.keys(memory).length > 0;
 
-  const sessionHeader = safeSessionId ? `  -H "X-Session-ID: ${safeSessionId}" \\\n` : '';
-  const jsSessionHeader = safeSessionId ? `    "X-Session-ID": "${safeSessionId}",\n` : '';
-  const pySessionHeader = safeSessionId ? `        "X-Session-ID": "${safeSessionId}",\n` : '';
+  const sessionHeader = safeUserId
+    ? `  -H "X-User-ID: ${safeUserId}" \\\n`
+    : safeSessionId
+    ? `  -H "X-Session-ID: ${safeSessionId}" \\\n`
+    : '';
+  const jsSessionHeader = safeUserId
+    ? `    "X-User-ID": "${safeUserId}",\n`
+    : safeSessionId
+    ? `    "X-Session-ID": "${safeSessionId}",\n`
+    : '';
+  const pySessionHeader = safeUserId
+    ? `        "X-User-ID": "${safeUserId}",\n`
+    : safeSessionId
+    ? `        "X-Session-ID": "${safeSessionId}",\n`
+    : '';
 
   const bodyPayload: any = { task };
-  if (safeSessionId) bodyPayload.sessionId = safeSessionId;
-  if (hasMemory) bodyPayload.memory = memory;
+  if (safeUserId) {
+    bodyPayload.userId = safeUserId;
+    if (hasMemory) bodyPayload.userMemory = memory;
+  } else {
+    if (safeSessionId) bodyPayload.sessionId = safeSessionId;
+    if (hasMemory) bodyPayload.memory = memory;
+  }
   const jsonBodyString = JSON.stringify(bodyPayload, null, 2);
   const shellSafePayload = JSON.stringify(bodyPayload).replace(/'/g, "'\\''");
 

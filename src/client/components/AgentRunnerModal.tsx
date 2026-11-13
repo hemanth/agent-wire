@@ -29,8 +29,10 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
   const [error, setError] = useState<string | null>(null);
   const [wireApiKey, setWireApiKey] = useState<string>(() => getStoredWireApiKey() || '');
 
-  // Stateful Session, Memory & Multi-turn History state
+  // Stateful Session, Sticky User, Memory & Multi-turn History state
   const [sessionEnabled, setSessionEnabled] = useState(false);
+  const [stickyUserEnabled, setStickyUserEnabled] = useState(false);
+  const [stickyUserId, setStickyUserId] = useState('usr_demo');
   const [sessionId, setSessionId] = useState(() => generateSessionId());
   const [memory, setMemory] = useState<Record<string, any>>({});
   const [messagesCount, setMessagesCount] = useState(0);
@@ -43,9 +45,15 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
   const modalRef = useModalA11y<HTMLDivElement>({ isOpen: true, onClose });
 
   const handleResetSession = async () => {
-    if (sessionId) {
-      const headers: Record<string, string> = {};
-      if (wireApiKey.trim()) headers['X-AgentWire-Key'] = wireApiKey.trim();
+    const headers: Record<string, string> = {};
+    if (wireApiKey.trim()) headers['X-AgentWire-Key'] = wireApiKey.trim();
+    if (stickyUserEnabled && stickyUserId.trim()) {
+      headers['X-User-ID'] = stickyUserId.trim();
+      await fetch(`/api/users/${encodeURIComponent(stickyUserId.trim())}/state`, {
+        method: 'DELETE',
+        headers
+      }).catch(() => {});
+    } else if (sessionId) {
       await fetch(`/api/agents/${agent.id}/sessions/${encodeURIComponent(sessionId)}`, {
         method: 'DELETE',
         headers
@@ -67,7 +75,11 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
       if (openRouterKey) headers['X-OpenRouter-Key'] = openRouterKey;
       if (wireApiKey.trim()) headers['X-AgentWire-Key'] = wireApiKey.trim();
       const payload: any = { task };
-      if (sessionEnabled) {
+      if (stickyUserEnabled && stickyUserId.trim()) {
+        headers['X-User-ID'] = stickyUserId.trim();
+        payload.userId = stickyUserId.trim();
+        if (Object.keys(memory).length > 0) payload.userMemory = memory;
+      } else if (sessionEnabled) {
         payload.sessionId = sessionId;
         if (Object.keys(memory).length > 0) payload.memory = memory;
       }
@@ -80,7 +92,11 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
       const data: RunAgentResponse = await res.json();
       setResponse(data);
       if (typeof data.sessionMessagesCount === 'number') setMessagesCount(data.sessionMessagesCount);
-      if (data.memory) setMemory(data.memory);
+      if (stickyUserEnabled && data.stickyUser?.userMemory) {
+        setMemory(data.stickyUser.userMemory);
+      } else if (data.memory) {
+        setMemory(data.memory);
+      }
     } catch (err: any) {
       setError(err.message || 'Execution failed');
     } finally {
@@ -279,10 +295,14 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
             </div>
           ) : (
             <>
-              {/* Session, Multi-turn History & Memory Controls */}
+              {/* Session, Sticky User, Multi-turn History & Memory Controls */}
               <SessionBar
                 enabled={sessionEnabled}
                 onToggle={setSessionEnabled}
+                stickyUserEnabled={stickyUserEnabled}
+                onStickyUserToggle={setStickyUserEnabled}
+                userId={stickyUserId}
+                onUserIdChange={setStickyUserId}
                 sessionId={sessionId}
                 onSessionIdChange={setSessionId}
                 messagesCount={messagesCount}
@@ -294,7 +314,14 @@ export const AgentRunnerModal: React.FC<AgentRunnerModalProps> = ({ agent, onClo
               {/* Direct cURL / Code Command */}
               <section aria-labelledby="curl-label">
                 <h3 id="curl-label" className="text-xs font-mono text-zinc-600 mb-2 uppercase tracking-wider font-semibold">1. Direct cURL Command</h3>
-                <CurlSnippet agentId={agent.id} agentName={agent.name} task={task} sessionId={sessionEnabled ? sessionId : undefined} memory={sessionEnabled ? memory : undefined} />
+                <CurlSnippet
+                  agentId={agent.id}
+                  agentName={agent.name}
+                  task={task}
+                  sessionId={sessionEnabled && !stickyUserEnabled ? sessionId : undefined}
+                  userId={stickyUserEnabled ? stickyUserId : undefined}
+                  memory={sessionEnabled || stickyUserEnabled ? memory : undefined}
+                />
               </section>
 
               {/* In-Browser Sandbox */}

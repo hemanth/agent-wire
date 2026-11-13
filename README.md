@@ -61,6 +61,20 @@ curl -N -X POST http://localhost:8787/api/agents/agt_design_critic/run \
 
 `POST /api/agents/:id/run` probes remote MCP tools, injects `SKILL.md` rules, delegates to A2A sub-agents, enforces safety guardrails, and returns JSON or `text/event-stream` (`step`, `delta`, `result`, `done`).
 
+## Sticky Per-User State, Pre-LLM Intent & Multi-Turn Slot Filling
+
+- **Per-User Durable Object Stickiness (`UserStateDO`)**: Pass `X-User-ID: alice_42` (or `"userId": "alice_42"`, OpenAI `"user": "alice_42"`) to auto-pin multi-turn conversations per user without managing `sessionId`s, serialize concurrent turns via Cloudflare SQLite Durable Objects, and persist cross-session `userMemory` (`GET|PUT|DELETE /api/users/:userId/state`).
+- **Pre-LLM Intent & Slot Clarification (`< 2 ms`)**: Attach `intents` (`keywords`, `examples`, `requiredSlots` with `enum`/`pattern`) to any agent. Missing slots short-circuit before calling an LLM (`status: "needs_input"`) and resume automatically on the user's next turn.
+- **Sticky Multi-Turn Fleet Router**: Route across your entire fleet via `POST /api/route`, `POST /api/intent`, MCP `route_intent`, A2A `agentId: "auto"`, or OpenAI `model: "agentwire/auto"`. Follow-up turns stick to the user's active agent; topic shifts hand off cleanly.
+
+```bash
+# Sticky fleet routing across turns (sticks on follow-ups, switches on topic shifts)
+curl -X POST http://localhost:8787/api/route \
+  -H "Content-Type: application/json" \
+  -H "X-User-ID: alice_42" \
+  -d '{"task": "Audit WCAG contrast and font pairing on our hero card", "userMemory": {"theme": "light-paper"}}'
+```
+
 ## Multi-Protocol Interoperability (Modern AI Stack)
 
 Every deployed agent automatically exposes four standard protocols:

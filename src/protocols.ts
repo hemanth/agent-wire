@@ -215,6 +215,10 @@ export function buildMcpServerCard(origin: string, agents: Agent[]) {
         description: 'Executes a deployed AgentWire agent by id or slug with optional session memory and reasoning effort.'
       },
       {
+        name: 'route_intent',
+        description: 'Classifies user intent across the AgentWire fleet, sticks to the user active agent on follow-ups, and executes with multi-turn slot filling.'
+      },
+      {
         name: 'eval_agent',
         description: 'Runs the built-in quality, guardrail, and latency evaluation suite against an agent.'
       },
@@ -494,6 +498,23 @@ export function buildOpenApiSpec(origin: string) {
           summary: 'Run deterministic evaluation suite against an agent',
           operationId: 'evalAgent'
         }
+      },
+      '/api/intent': {
+        post: {
+          summary: 'Zero-LLM sub-2ms intent classification, slot extraction, and target agent routing probe',
+          operationId: 'classifyIntent'
+        }
+      },
+      '/api/route': {
+        post: {
+          summary: 'Sticky multi-turn fleet router that pins follow-ups to the user active agent and switches on topic shifts',
+          operationId: 'routeAndExecuteFleet'
+        }
+      },
+      '/api/users/{userId}/state': {
+        get: { summary: 'Inspect principal-locked per-user Durable Object profile and cross-session memory', operationId: 'getUserState' },
+        put: { summary: 'Update per-user profile memory in UserStateDO', operationId: 'updateUserState' },
+        delete: { summary: 'Reset per-user Durable Object profile and sticky sessions', operationId: 'resetUserState' }
       },
       '/mcp': {
         post: {

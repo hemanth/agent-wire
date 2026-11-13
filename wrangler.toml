@@ -1,5 +1,5 @@
 name = "agent-wire"
-main = "src/worker.ts"
+main = "src/cf-entry.ts"
 compatibility_date = "2026-09-22"
 compatibility_flags = ["nodejs_compat"]
 
@@ -32,3 +32,11 @@ FEATURE_FLAGS = "mcpLiveExecution=true,a2aDelegation=true,openAiFacade=true,eval
 [[kv_namespaces]]
 binding = "AGENTS_KV"
 id = "5b426282f7bf4bf7bc8b7df42cffa065"
+
+[[durable_objects.bindings]]
+name = "USER_STATE_DO"
+class_name = "UserStateDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserStateDO"]

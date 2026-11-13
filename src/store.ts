@@ -14,6 +14,10 @@ export interface Env {
     delete(key: string): Promise<void>;
     list(options?: { prefix?: string; limit?: number }): Promise<{ keys: Array<{ name: string }> }>;
   };
+  USER_STATE_DO?: {
+    idFromName(name: string): { toString(): string };
+    get(id: { toString(): string }): { fetch(request: Request): Promise<Response> };
+  };
   ASSETS?: {
     fetch(request: Request): Promise<Response>;
   };

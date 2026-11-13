@@ -33,6 +33,74 @@ export interface AgentGuardrails {
   maxToolSteps?: number;
 }
 
+export interface AgentIntentSlotSpec {
+  name: string;
+  description: string;
+  pattern?: string;
+  enum?: string[];
+}
+
+export interface AgentIntentSpec {
+  id: string;
+  description: string;
+  keywords?: string[];
+  examples?: string[];
+  clarifyOnMissingSlots?: boolean;
+  requiredSlots?: AgentIntentSlotSpec[];
+}
+
+export interface DetectedIntentResult {
+  id: string;
+  description?: string;
+  confidence: number;
+  action: 'execute' | 'clarify';
+  isFollowUp: boolean;
+  resumedPending?: boolean;
+  slots: Record<string, string>;
+  missingSlots: string[];
+  matchedKeywords?: string[];
+  targetAgentId?: string;
+  targetAgentSlug?: string;
+}
+
+export interface AgentRoutingSummary {
+  targetAgentId: string;
+  targetAgentSlug: string;
+  confidence: number;
+  stickyHit: boolean;
+  switchedAgent: boolean;
+  previousAgentId?: string;
+  reason: string;
+}
+
+export interface StickyUserSummary {
+  userId: string;
+  sessionId: string;
+  autoBound: boolean;
+  totalRuns: number;
+  activeAgentId?: string;
+  userMemory: Record<string, any>;
+}
+
+export interface UserProfileState {
+  userId: string;
+  principalHash: string;
+  createdAt: string;
+  updatedAt: string;
+  totalRuns: number;
+  activeAgentId?: string;
+  userMemory: Record<string, any>;
+  pendingIntents: Record<
+    string,
+    {
+      intentId: string;
+      originalTask: string;
+      slots: Record<string, string>;
+      updatedAt: string;
+    }
+  >;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -46,6 +114,7 @@ export interface Agent {
   responseFormat?: 'text' | 'json_object' | 'json_schema';
   outputSchema?: Record<string, any>;
   guardrails?: AgentGuardrails;
+  intents?: AgentIntentSpec[];
   subAgents?: string[];
   mcps: McpConnector[];
   skills: AttachedSkill[];
@@ -65,6 +134,10 @@ export interface RunAgentRequest {
   prompt?: string;
   messages?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   sessionId?: string;
+  userId?: string;
+  user?: string;
+  stickyUser?: boolean;
+  userMemory?: Record<string, any>;
   callerPrincipal?: string;
   mcpToken?: string;
   context?: Record<string, any>;
@@ -79,7 +152,7 @@ export interface RunAgentRequest {
 
 export interface ToolExecutionStep {
   step: number;
-  type: 'thought' | 'tool_call' | 'tool_result' | 'handoff' | 'guardrail' | 'answer';
+  type: 'thought' | 'intent' | 'tool_call' | 'tool_result' | 'handoff' | 'guardrail' | 'answer';
   timestamp: string;
   durationMs?: number;
   mcpName?: string;
@@ -96,7 +169,7 @@ export interface RunAgentResponse {
   task: string;
   result: string;
   structuredOutput?: any;
-  status: 'success' | 'error';
+  status: 'success' | 'needs_input' | 'error';
   error?: string;
   modelUsed: string;
   modelsAttempted?: string[];
@@ -104,6 +177,9 @@ export interface RunAgentResponse {
   toolsUsed: string[];
   subAgentsCalled?: string[];
   guardrailsTriggered?: string[];
+  intent?: DetectedIntentResult;
+  routing?: AgentRoutingSummary;
+  stickyUser?: StickyUserSummary;
   steps: ToolExecutionStep[];
   tokens?: {
     prompt: number;
@@ -140,6 +216,7 @@ export interface AgentSession {
   id: string;
   agentId: string;
   principalHash?: string;
+  userId?: string;
   createdAt: string;
   updatedAt: string;
   messages: AgentSessionMessage[];
